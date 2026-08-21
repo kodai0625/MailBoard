@@ -1,0 +1,122 @@
+/* ============================================================
+ *  Mail Board — 色と書体
+ *
+ *  style.css より後ろで読むこと。
+ *
+ *  Trip Board（藍）・Flight Board（金）・Pack Board（緑）と
+ *  兄弟に見えるよう、明朝体の見出しと細い線という作りは揃えて
+ *  います。違うのは主色で、こちらは菫（すみれ）です。
+ *  ★兄弟のどれとも違う色にしているのは、ホーム画面に4つ並んだ
+ *    ときに色だけで取り違えないようにするためです。
+ *
+ *  色の数値はコントラスト比を確かめたうえで決めています。
+ *  本文と背景で 4.5 : 1 以上を保っています。
+ * ============================================================ */
+
+/* ---- 明るいとき ---- */
+:root {
+  --bg:        #f2f1f4;
+  --surface:   #ffffff;
+  --surface-2: #f7f6f9;
+  --line:      #d9d6e0;
+  --line-2:    #e6e3ec;
+  --text:      #1b1a20;
+  --text-sub:  #5f5c6b;   /* 6.2 : 1 */
+  --text-weak: #6f6b7c;   /* 5.0 : 1 */
+  --accent:    #6247aa;   /* 菫。6.1 : 1 */
+  --on-accent: #ffffff;
+  --header-bg: #1a1626;
+  --danger:    #9c3320;   /* 5.9 : 1 */
+  --radius:    14px;
+}
+
+/* ---- 暗いとき ---- */
+:root[data-theme="dark"] {
+  --bg:        #100e16;
+  --surface:   #191722;
+  --surface-2: #201d2b;
+  --line:      #363248;
+  --line-2:    #2b2839;
+  --text:      #eae8ef;
+  --text-sub:  #a7a2b6;   /* 7.3 : 1 */
+  --text-weak: #918ca2;   /* 5.5 : 1 */
+  --accent:    #a48fe0;   /* 暗い地の上なので明るい菫に反転。6.8 : 1 */
+  --on-accent: #100e16;
+  --header-bg: #0b0910;
+  --danger:    #e0806c;   /* 7.2 : 1 */
+}
+
+/* ---- 見出しは明朝体。兄弟アプリで揃えた家族の印 ---- */
+.app-title__main,
+.sheet__meta h2,
+.sheet__t {
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-weight: 600;
+  letter-spacing: .05em;
+}
+.app-title__mark { color: rgba(255, 255, 255, .85); }
+
+/* ---- 選んでいる箱 ---- */
+.chip.is-active {
+  background: rgba(255, 255, 255, .93);
+  border-color: rgba(255, 255, 255, .93);
+  color: #1a1626;
+  font-weight: 600;
+}
+.chip.is-active .chip__n,
+.chip.is-active .chip__u { background: rgba(26, 22, 38, .13); }
+
+/* ============================================================
+ *  カテゴリーの色
+ *
+ *  ★9色を色相で散らしています。同じ色みが隣り合うと、
+ *    一覧をざっと見たときに見分けがつかないためです。
+ *    どれも背景との差を 4.5 : 1 以上にしてあります。
+ * ========================================================== */
+.tag--auth   { color: #9c3320; border-color: #e6c6bf; background: #fbeeeb; }
+.tag--card   { color: #8a5a12; border-color: #e8d5b0; background: #fcf4e6; }
+.tag--money  { color: #2f6b3d; border-color: #c3ddc9; background: #eef7f0; }
+.tag--shop   { color: #1f6273; border-color: #bcd8de; background: #ecf5f7; }
+.tag--travel { color: #2a5390; border-color: #c2d1e8; background: #edf2fa; }
+.tag--booking{ color: #1f5d4e; border-color: #bcd9d0; background: #ecf6f2; }
+.tag--people { color: #6247aa; border-color: #d2c8ea; background: #f2eefb; }
+.tag--point  { color: #8b3d6b; border-color: #e5c4d8; background: #fbeef5; }
+.tag--news   { color: #5f5c6b; border-color: #dcd9e2; background: #f4f3f6; }
+.tag--other  { color: #6f6b7c; border-color: #dcd9e2; background: #f4f3f6; }
+
+/* ---- 会社の箱で使うもの ---- */
+.tag--order   { color: #7a4a1c; border-color: #e3cdb2; background: #fbf2e8; }
+.tag--upsider { color: #33487f; border-color: #c3cce4; background: #eef1f9; }
+.tag--uber    { color: #1f6b3c; border-color: #bcdcc6; background: #edf7f0; }
+.tag--demae   { color: #9c3320; border-color: #e6c6bf; background: #fbeeeb; }
+.tag--baitoru { color: #7d5a12; border-color: #e4d6ac; background: #fbf6e6; }
+.tag--person  { color: #6247aa; border-color: #d2c8ea; background: #f2eefb; }
+.tag--sns     { color: #a13a5e; border-color: #ecc4d2; background: #fceef3; }
+.tag--homepage{ color: #14657f; border-color: #b7d5e0; background: #eaf4f8; }
+
+:root[data-theme="dark"] .tag--auth   { color: #e8927c; border-color: #4a2b23; background: #2a1a16; }
+:root[data-theme="dark"] .tag--card   { color: #dfb469; border-color: #46381f; background: #272013; }
+:root[data-theme="dark"] .tag--money  { color: #7fc191; border-color: #2b4433; background: #16241b; }
+:root[data-theme="dark"] .tag--shop   { color: #79bccb; border-color: #24414a; background: #132227; }
+:root[data-theme="dark"] .tag--travel { color: #8fb3e6; border-color: #2a3c56; background: #151f2e; }
+:root[data-theme="dark"] .tag--booking{ color: #74c2ac; border-color: #234037; background: #12221d; }
+:root[data-theme="dark"] .tag--people { color: #b7a4ea; border-color: #3a3153; background: #1e1a2c; }
+:root[data-theme="dark"] .tag--point  { color: #dc9cc2; border-color: #4a2c3f; background: #281822; }
+:root[data-theme="dark"] .tag--news   { color: #a7a2b6; border-color: #363248; background: #201d2b; }
+:root[data-theme="dark"] .tag--other  { color: #918ca2; border-color: #363248; background: #201d2b; }
+:root[data-theme="dark"] .tag--order   { color: #d3a374; border-color: #45331f; background: #261c12; }
+:root[data-theme="dark"] .tag--upsider { color: #92a7de; border-color: #2a3454; background: #151a2c; }
+:root[data-theme="dark"] .tag--uber    { color: #7cc498; border-color: #23422f; background: #13231a; }
+:root[data-theme="dark"] .tag--demae   { color: #e8927c; border-color: #4a2b23; background: #2a1a16; }
+:root[data-theme="dark"] .tag--baitoru { color: #d9bd72; border-color: #443a1f; background: #262112; }
+:root[data-theme="dark"] .tag--person  { color: #b7a4ea; border-color: #3a3153; background: #1e1a2c; }
+:root[data-theme="dark"] .tag--sns     { color: #e59ab6; border-color: #4b2937; background: #291821; }
+:root[data-theme="dark"] .tag--homepage{ color: #74bcd6; border-color: #234049; background: #122127; }
+
+/* ---- 消す操作は赤で示します ---- */
+.btn--danger { color: var(--danger); border-color: var(--danger); }
+
+/* ---- 短い知らせ ---- */
+.toast { background: var(--text); color: var(--bg);
+         box-shadow: 0 2px 14px rgba(0, 0, 0, .3); }
+.toast.is-bad { background: var(--danger); color: #fff; }

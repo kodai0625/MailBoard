@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- ★ホーム画面に出る文字だけ短くしています。正式な名前は
+     下の <title> のとおり Mail Board です。iPhone の狭い幅では
+     長い名前が途中で切れてしまうためです。
+     ★一度ホーム画面に追加すると、ここを直しても文字は変わりません。
+     入れ直しが要ります。追加する前に決めておくところです。 -->
+<meta name="apple-mobile-web-app-title" content="Mail">
+<meta name="theme-color" content="#1a1626">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="img/app-icon-180.png">
+<title>Mail Board</title>
+<!-- ★版の印。公開する.py が中身から計算して入れます。
+     手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
+<meta name="app-version" content="df96b69b6c">
+<script>
+/* 画面が描かれる前に明暗を決めます。
+   ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
+(function () {
+  // すでに明暗が決まっているときは、そちらに従います。
+  // （プレビューとして人の画面に置いたとき、その人の設定を
+  //   こちらで上書きしてしまわないようにするためです）
+  if (document.documentElement.dataset.theme) return;
+  try {
+    var pref = localStorage.getItem('mail-board-v1:theme') || 'auto';
+    var dark = pref === 'dark' ||
+               (pref === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  } catch (e) { document.documentElement.dataset.theme = 'light'; }
+})();
+</script>
+<!-- ★ ?v= は「読み込み直させるための版番号」です。
+     css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
+<link rel="stylesheet" href="css/style.css?v=df96b69b6c">
+<link rel="stylesheet" href="css/design.css?v=df96b69b6c">
+</head>
+<body>
+
+<!-- ===== しるしのもと ===== -->
+<svg class="sprite" aria-hidden="true" focusable="false">
+  <symbol id="i-inbox" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 13.5h4l1.4 2.4h6.2l1.4-2.4h4"/><path d="M5.3 5.2h13.4l2.3 8.3v4.1a1.8 1.8 0 0 1-1.8 1.8H4.8A1.8 1.8 0 0 1 3 17.6v-4.1z"/></g></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H21"/><path d="M17.6 12v3.2M20.2 12v2.2"/></g></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.8" y="5.4" width="18.4" height="13.2" rx="2.2"/><path d="M2.8 9.8h18.4"/><path d="M6.4 14.6h3.4"/></g></symbol>
+  <symbol id="i-yen" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 5.2 12 12l5-6.8"/><path d="M12 12v6.8"/><path d="M8.2 13.4h7.6M8.2 16h7.6"/></g></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.4 8.2 4v9.2L12 20.6 3.8 16.6V7.4z"/><path d="m3.8 7.4 8.2 4 8.2-4M12 11.4v9.2"/></g></symbol>
+  <symbol id="i-plane" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 3.6a1.4 1.4 0 0 1 2.8 0v5.6l7.2 4.2v2.2l-7.2-2.2v4l2.4 1.8v1.6L12 19.6l-3.8 1.2v-1.6l2.4-1.8v-4L3.4 15.6v-2.2l7.2-4.2z"/></g></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.4" y="5.4" width="17.2" height="15.2" rx="2.4"/><path d="M3.4 10h17.2"/><path d="M8 3.4v3.6M16 3.4v3.6"/><path d="m9.2 14.6 1.9 1.9 3.7-3.9"/></g></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4.2"/><path d="M6 5.1c3.6-1.6 6.4.9 10 -.5v8.9c-3.6 1.4-6.4-1.1-10 .5z"/></g></symbol>
+  <symbol id="i-bike" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.4" cy="17.2" r="3.2"/><circle cx="18.6" cy="17.2" r="3.2"/><path d="M8.6 17.2h6.8l-3.1-6.6H8.2"/><path d="m15.4 10.6 1.5-4.2h2.6"/><path d="M13.2 6.4h3.7"/></g></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.6"/><path d="M4.8 20.2c.6-3.7 3.6-6 7.2-6s6.6 2.3 7.2 6"/></g></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="17.6" cy="5.8" r="2.7"/><circle cx="6.4" cy="12" r="2.7"/><circle cx="17.6" cy="18.2" r="2.7"/><path d="m8.8 10.7 6.4-3.5M8.8 13.3l6.4 3.5"/></g></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2"/><path d="M12 3.4c2.3 2.5 3.5 5.4 3.5 8.6S14.3 18.1 12 20.6c-2.3-2.5-3.5-5.4-3.5-8.6S9.7 5.9 12 3.4z"/></g></symbol>
+  <symbol id="i-talk" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 12.4c0 3.7-3.6 6.7-8 6.7-1 0-2-.2-2.9-.5l-4.5 1.6 1.5-3.8c-1.3-1.1-2.1-2.5-2.1-4 0-3.7 3.6-6.7 8-6.7s8 3 8 6.7z"/></g></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3.8 2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.9l5.8-.8z"/></g></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.4V11a6 6 0 1 0-12 0v5.4L4.4 18.6h15.2z"/><path d="M10.2 18.6a1.9 1.9 0 0 0 3.6 0"/></g></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/></g></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.6 4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.8v2.4M12 18.8v2.4M4.5 4.5l1.7 1.7M17.8 17.8l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.5 19.5l1.7-1.7M17.8 6.2l1.7-1.7"/></g></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.6 5.4 8 12l6.6 6.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.9" y="5.2" width="18.2" height="13.6" rx="2.4"/><path d="m3.6 7.2 8.4 5.8 8.4-5.8"/></g></symbol>
+</svg>
+
+<div id="app">
+
+  <!-- ===== 上の帯 ===== -->
+  <header class="hd">
+    <div class="hd__row">
+      <button class="iconbtn hd__cats" id="catsBtn" aria-label="カテゴリー">☰</button>
+      <h1 class="app-title">
+        <span class="app-title__mark">◆</span>
+        <span class="app-title__main">Mail Board</span>
+      </h1>
+      <button class="iconbtn" id="gear" aria-label="設定">⚙</button>
+    </div>
+    <div class="hd__search">
+      <input id="q" type="search" placeholder="差出人・件名で探す" autocomplete="off">
+    </div>
+    <nav class="folders" id="folders"></nav>
+  </header>
+
+  <div class="demobar" id="demoBar" hidden>
+    これは<b>見本</b>です。本物のメールにはまだつながっていません。
+    <button class="link" id="demoSet">つなぎかたを見る</button>
+  </div>
+
+  <!-- ===== 本体 ===== -->
+  <div class="main" id="main">
+    <aside class="cats" id="cats"></aside>
+
+    <section class="pane">
+      <div class="listbar">
+        <span class="listbar__c" id="count"></span>
+        <span class="spacer"></span>
+        <button class="pill" id="toMeBtn">宛先</button>
+        <button class="pill" id="sendersBtn">差出人</button>
+        <button class="pill" id="unreadBtn">未読だけ</button>
+        <button class="pill" id="flagBtn">フラグ</button>
+        <button class="pill" id="pickBtn">選ぶ</button>
+      </div>
+      <p class="note" id="toMeNote" hidden></p>
+      <ul class="list" id="list"></ul>
+      <button class="more" id="more" hidden></button>
+      <p class="note" id="scanNote" hidden>
+        古いメールがまだ全部そろっていません。設定の「続きを読み込む」で最後まで入ります。
+      </p>
+    </section>
+  </div>
+
+  <!-- ===== 一括で選んだときの帯 ===== -->
+  <div class="bulk" id="bulk" hidden>
+    <span class="bulk__n" id="selN"></span>
+    <button class="pill" id="selAll">全部</button>
+    <button class="pill" id="selUnread">未読だけ</button>
+    <button class="pill pill--go" id="doRead">既読にする</button>
+    <button class="pill" id="doUnread">未読に戻す</button>
+    <button class="pill" id="doFlag">フラグ</button>
+    <button class="pill" id="unFlag">フラグ解除</button>
+    <button class="pill" id="pickDone">やめる</button>
+  </div>
+
+  <div class="busy" id="busy"></div>
+</div>
+
+<!-- ===== 本文 ===== -->
+<div class="sheet" id="detail" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="dClose" aria-label="戻る"><svg class="ico"><use href="#i-back"/></svg></button>
+    <span class="spacer"></span>
+    <button class="pill" id="starBtn">フラグを付ける</button>
+    <button class="pill" id="moveBtn">分類を変える</button>
+    <button class="pill" id="dUnread">未読に戻す</button>
+    <button class="pill pill--go" id="replyBtn">返信</button>
+  </div>
+  <div class="sheet__meta">
+    <h2 id="dSubj"></h2>
+    <div class="meta__l"><span id="dFrom"></span></div>
+    <div class="meta__l"><span id="dDate"></span></div>
+    <div class="meta__l" id="dCat"></div>
+    <button class="pill pill--img" id="imgBtn">画像を表示</button>
+  </div>
+  <iframe id="dBody" class="body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+</div>
+
+<!-- ===== 返信 ===== -->
+<div class="sheet sheet--sub" id="reply" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="rClose" aria-label="閉じる"><svg class="ico"><use href="#i-back"/></svg></button>
+    <span class="spacer"></span>
+    <label class="chk"><input type="checkbox" id="rAll"> 全員に返す</label>
+    <button class="pill" id="rDraft">下書きに入れる</button>
+    <button class="pill pill--go" id="rSend">送る</button>
+  </div>
+  <div class="sheet__body">
+    <p class="muted">宛先： <span id="rTo"></span></p>
+    <p class="muted" id="rFromWrap" hidden>差出人： <select id="rFrom"></select></p>
+    <div class="tplbar" id="rTpl"></div>
+    <textarea id="rText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
+    <p class="muted small">送るのは「送る」を押したときだけです。まず「下書きに入れる」でも構いません。</p>
+  </div>
+</div>
+
+<!-- ===== 差出人 ===== -->
+<div class="sheet" id="senders" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="seClose" aria-label="戻る"><svg class="ico"><use href="#i-back"/></svg></button>
+    <h2 class="sheet__t">差出人</h2>
+    <span class="spacer"></span>
+    <button class="pill is-on" id="seDomain">送り元ごと</button>
+    <button class="pill" id="seAddr">アドレスごと</button>
+  </div>
+  <div class="sheet__body">
+    <p class="muted small" id="seWhere"></p>
+    <input id="seFind" type="search" placeholder="差出人で絞る" autocomplete="off">
+    <div id="seBox"></div>
+  </div>
+</div>
+
+<!-- ===== 設定 ===== -->
+<div class="sheet" id="settings" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="sClose" aria-label="閉じる"><svg class="ico"><use href="#i-back"/></svg></button>
+    <h2 class="sheet__t">設定</h2>
+    <span class="spacer"></span>
+    <button class="pill" id="freshBtn">今すぐ最新に</button>
+    <button class="pill" id="themeBtn">明るさ</button>
+  </div>
+  <div class="sheet__body">
+
+    <section class="sec">
+      <h3>受け口</h3>
+      <p class="muted small">
+        受け口は Google アカウントごとに1つ置きます。Apps Script は
+        <b>置いたアカウントのメールしか読めない</b>ためです。
+        合言葉も索引も、受け口ごとに別です。
+      </p>
+      <div id="srcBox"></div>
+      <p class="muted small">
+        URL は端末の中に覚えます。<b>アプリをネットに置いて使うときは、
+        js/config.js の URL は空のままにして、ここに入れてください。</b>
+        置いてあるファイルは誰でも読めるので、書いたままだと守りが
+        合言葉だけになります。<br>
+        「続きを読み込む」は古いほうへさかのぼります。2万通あると十数分かかりますが、
+        途中でやめても、次に押せば続きから始まります。読み込むのは
+        <b>差出人・件名・日時だけ</b>で、本文は入りません。<br>
+        合言葉は端末の中だけに残ります。これが分かるとメールが読めてしまうので、
+        人に見える場所には書かないでください。
+      </p>
+    </section>
+
+    <section class="sec">
+      <h3>自分のアドレス</h3>
+      <p class="muted small">
+        1行に1つ、<b>アドレス, 呼び名</b> の形で書きます。呼び名はフォルダに出る
+        短い名前です（省いてもかまいません）。<br>
+        <b>1行目は、メールを集めている Google アカウントにしてください。</b>
+        転送で届いたぶんを、元の宛先で振り分けるために使います。
+      </p>
+      <p class="muted small" id="addrNote"></p>
+      <textarea id="addrIn" rows="4" placeholder="あなた@gmail.com, 個人&#10;あなた@会社.co.jp, 会社&#10;あなた@icloud.com, iCloud"></textarea>
+      <button class="pill pill--go" id="addrSave">覚える</button>
+    </section>
+
+    <section class="sec">
+      <h3>仕分けの決まりごと</h3>
+      <p class="muted small">
+        上から順に見ていき、<b>最初に当たったところで決まります</b>。
+        番号（順番）が小さいほど先に見ます。
+      </p>
+      <div class="rules" id="rulesBox"></div>
+      <div class="small" id="builtIn"></div>
+      <div class="row row--wrap">
+        <select id="ruleCat"></select>
+        <select id="ruleBox"></select>
+        <select id="ruleKind">
+          <option value="from">差出人に含む</option>
+          <option value="subj">件名に含む</option>
+          <option value="text">件名・本文に含む</option>
+          <option value="human">人からのメール</option>
+        </select>
+        <input id="rulePat" placeholder="例： rakuten-card.co.jp">
+        <input id="ruleOrd" type="number" value="5" min="1" max="999" title="順番">
+        <button class="pill" id="ruleAdd">足す</button>
+        <button class="pill pill--go" id="rulesSave">保存する</button>
+      </div>
+    </section>
+
+    <section class="sec">
+      <h3>返信のテンプレ</h3>
+      <p class="muted small">{name} と書くと、相手の名前に置き換わります。</p>
+      <div class="tpls" id="tplBox"></div>
+      <div class="row">
+        <button class="pill" id="tplAdd">足す</button>
+        <button class="pill pill--go" id="tplSave">保存する</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- 新しい版が出たときだけ現れます -->
+<div class="updbar" id="updateBar" hidden>
+  <span>新しい版があります</span>
+  <button class="pill pill--go">読み込み直す</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/config.js?v=df96b69b6c"></script>
+<script src="js/store.js?v=df96b69b6c"></script>
+<script src="js/api.js?v=df96b69b6c"></script>
+<script src="js/update.js?v=df96b69b6c"></script>
+<script src="js/rules.js?v=df96b69b6c"></script>
+<script src="js/app.js?v=df96b69b6c"></script>
+</body>
+</html>
