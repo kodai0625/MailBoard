@@ -37,6 +37,7 @@ const S = {
   main: '',           // 決まりごととテンプレを置いてある受け口
   tpl: [],
   aliases: [],        // Gmail に登録ずみの送信者
+  bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   images: false,      // 本文の画像を出すかどうか
   busy: '',
   scanning: false,
@@ -651,6 +652,56 @@ function applyRead(keys, read) {
  *  本文を開く
  * ========================================================== */
 
+/* ============================================================
+ *  本文の控え（開いているあいだだけ）
+ *
+ *  ★受け口への1往復に1〜3秒かかります。Apps Script はそういうもので、
+ *    こちらからは短くできません。だから**取りに行く回数を減らします。**
+ *
+ *  ★ためておくのは**画面を開いているあいだだけ**です。端末にも
+ *    表計算にも書きません。閉じれば消えます。
+ *    「本文はどこにも複製しない」という作りはそのままです。
+ *
+ *  ★30通ぶんで打ち止めにして、古いものから捨てます。広告メールは
+ *    1通で数百KBあるので、際限なくためると端末が重くなります。
+ * ========================================================== */
+const BODY_KEEP = 30;
+
+function bodyGet(key) {
+  const d = S.bodies.get(key);
+  if (d) {                      // 使ったものを新しいほうへ回します
+    S.bodies.delete(key);
+    S.bodies.set(key, d);
+  }
+  return d;
+}
+
+function bodyPut(key, d) {
+  S.bodies.set(key, d);
+  while (S.bodies.size > BODY_KEEP) S.bodies.delete(S.bodies.keys().next().value);
+}
+
+/**
+ * 次に読みそうな1通を、先に取っておきます。
+ *
+ * ★一覧を上から読んでいくとき、次の1通は待たずに出ます。
+ *   読んでいる数秒のあいだに裏で取ってくるので、体感では消えます。
+ *
+ * ★既読にはしません。取ってくるだけです。
+ */
+function prefetchNext(key) {
+  if (S.demo) return;
+  const rows = filtered();
+  const i = rows.findIndex((r) => Rules.keyOf(r) === key);
+  const next = i >= 0 ? rows[i + 1] : null;
+  if (!next) return;
+  const nk = Rules.keyOf(next);
+  if (S.bodies.has(nk)) return;
+  Api.body(String(next[F.SRC] || ''), String(next[F.ID]))
+    .then((d) => bodyPut(nk, d))
+    .catch(() => {});           // 先取りの失敗は黙って捨てます
+}
+
 async function openMail(key) {
   const row = rowByKey(key);
   if (!row) return;
@@ -681,11 +732,22 @@ async function openMail(key) {
       + '<p style="color:#888">（見本です。受け口をつなぐと本物の本文が出ます）</p>', false);
     return;
   }
-  $('#dBody').srcdoc = wrapBody('<p style="color:#888">読み込んでいます…</p>', false);
-  try {
-    const d = await Api.body(src, id);
-    S._body = d;
+  // ★一度読んだものは、取りに行かずにそのまま出します
+  const had = bodyGet(key);
+  if (had) {
+    S._body = had;
     paintBody();
+  } else {
+    $('#dBody').srcdoc = wrapBody('<p style="color:#888">読み込んでいます…</p>', false);
+  }
+  try {
+    if (!had) {
+      const d = await Api.body(src, id);
+      bodyPut(key, d);
+      S._body = d;
+      paintBody();
+    }
+    prefetchNext(key);
     if (row[F.UNREAD]) {
       // 開いたら既読。Gmail 側と食い違わないよう索引も直します
       applyRead([key], true);
