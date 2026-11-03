@@ -1052,11 +1052,16 @@ function verMark(id) {
   if (!want) return '';
   const got = String(S.ver[id] || '');
   if (want === got) return '<span class="src__ver">コードは最新です</span>';
-  // ★印を返してこないときも「古い」です。印を返す仕組みが入る前の
+  // ★印を返してこないときも食い違いです。印を返す仕組みが入る前の
   //   コードだからです。はじめ、ここで何も出さないようにしていました。
   //   **いちばん知らせるべき場面で黙る**という、いちばんまずい作りでした。
-  return '<span class="src__ver is-old">コードが古いままです。'
-       + '貼り替えてデプロイし直してください</span>';
+  //
+  // ★「受け口が古い」とは言いきりません。印はただの文字列で、
+  //   どちらが新しいかは分かりません。実際、iPhone の公開版だけ
+  //   更新し忘れていて、**古いのはアプリのほうだった**ことがあります
+  //   （2026年11月3日）。両方の直しかたを出します。
+  return '<span class="src__ver is-old">アプリと受け口の版が違います。'
+       + 'コードを貼り替えてデプロイするか、アプリを公開し直してください</span>';
 }
 
 /**
@@ -1138,6 +1143,15 @@ function renderSources() {
             + ' placeholder="合言葉（16文字以上）">'
             + '<button class="pill pill--go" data-act="pin">つなぐ</button></div>'
           : '')
+      // ★合言葉を思い出せるようにします。ほかの端末（iPhone）で
+      //   入れるときに要りますが、覚えているものではありません。
+      //   受け口を作り直さないと分からない、では困るためです。
+      //   出てくるのは、この端末に入れてあるものだけです
+      + (set
+          ? '<p class="muted small src__pinline">合言葉 '
+            + '<code class="src__pinv" hidden>' + esc(Api.pin(id)) + '</code>'
+            + '<button class="link" data-act="showpin">見る</button></p>'
+          : '')
       + (on ? countLine(id, n) : '')
       + (on
           ? '<label class="lbl">読み込む範囲</label>'
@@ -1148,8 +1162,14 @@ function renderSources() {
             +   'ふつうは <b>in:inbox</b>（受信トレイ）のままで結構です。'
             +   '転送で届くぶん（受信トレイに残らないこともあります）や、'
             +   'iCloud から写したぶんも読むなら、こうします。'
-            +   '<br><b class="q">' + esc(cloudQuery(id)) + '</b>'
-            +   '<button class="link" data-act="qcloud">これを入れる</button>'
+            +   (cloudReady()
+                  ? '<br><b class="q">' + esc(cloudQuery(id)) + '</b>'
+                    + '<button class="link" data-act="qcloud">これを入れる</button>'
+                  : '<br><b class="is-warn">つながっていない受け口があるので、'
+                    + '見本はまだ出せません。</b>'
+                    + 'ぜんぶつないでからにしてください。'
+                    + '（つながっていないアドレスを「受け口の無いアドレス」と'
+                    + '取り違えて、別の受け口のぶんまで読みにいってしまうためです）')
             + '</p>'
           : '')
       + (on
@@ -1178,6 +1198,18 @@ function renderSources() {
  *    個人と会社はそれぞれ受け口があるので、そちらから直接読んでいます。
  *    ここに足すと同じメールを二度読みにいくことになります。
  */
+/**
+ * 「読み込む範囲」の見本を出してよいか。
+ *
+ * ★受け口を置いてあるアドレスなのに、いまつながっていないと、
+ *   cloudQuery がそれを「受け口の無いアドレス」と取り違えます。
+ *   その見本を入れると、たとえば個人の受け口が会社ぶんまで
+ *   読みにいきます。つながっていないものがあるうちは出しません。
+ */
+function cloudReady() {
+  return SOURCES.every((s) => Api.enabled(s.id) && S.ok[s.id] === true);
+}
+
 function cloudQuery(src) {
   const hosted = Object.keys(S.hosts).map((k) => S.hosts[k]).filter(Boolean);
   const extra = S.myAddrs.filter((a) => hosted.indexOf(a) < 0);
@@ -1599,6 +1631,13 @@ function bindEvents() {
         setTimeout(() => location.reload(), 700);
       } catch (err) { toast(String(err.message || err), true); }
       finally { S.busy = ''; render(); }
+      return;
+    }
+    if (b.dataset.act === 'showpin') {
+      const v = $('.src__pinv', box);
+      if (!v) return;
+      v.hidden = !v.hidden;
+      b.textContent = v.hidden ? '見る' : '隠す';
       return;
     }
     if (b.dataset.act === 'sync') { syncNew(false); return; }

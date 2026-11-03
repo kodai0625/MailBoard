@@ -405,6 +405,13 @@ input[type="number"] { width: 5.5em; }
 /* その箱に無いカテゴリーを指している決まりごと。効かないことを言います */
 .rule__b--no { color: var(--danger); font-weight: 600; }
 
+/* 合言葉。押したときだけ出します */
+.src__pinline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.src__pinv { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+             font-size: 13px; letter-spacing: .04em; word-break: break-all;
+             background: var(--surface-2); border: 1px solid var(--line);
+             border-radius: 6px; padding: 2px 7px; color: var(--text); }
+
 /* 読み込む範囲の見本。長いので折り返させます */
 .q { display: inline-block; word-break: break-all; line-height: 1.5;
      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
