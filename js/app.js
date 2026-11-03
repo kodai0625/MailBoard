@@ -106,7 +106,40 @@ function fmtFull(ms) {
  *    直接 Gmail に届いたメールは、集めた先しか出てこないので
  *    そのまま Gmail のフォルダに入ります。
  * ========================================================== */
-function folderOf(row) {
+/**
+ * 差出人・件名の目印で箱を決める上書き。当たらなければ空です。
+ *
+ * ★登録していない呼び名の目印は、当たっても無視します。
+ *   自分のアドレスとして登録していない箱は作れないためです。
+ */
+function hintBox(row) {
+  // ★空白は取り払ってから見比べます。差出人の名前や件名の
+  //   「炭焼ハンバーグ バグる」は、全角の空白で書かれていることも
+  //   半角のこともあり、そのままだと当たったり当たらなかったりします
+  const flat = (t) => String(t || '').toLowerCase().replace(/[\s\u3000]+/g, '');
+  const hay = flat(String(row[F.FROM] || '') + String(row[F.NAME] || '')
+                 + String(row[F.SUBJ] || ''));
+  if (!hay) return '';
+  const names = Object.keys(BOX_HINTS);
+  for (let i = 0; i < names.length; i++) {
+    const marks = BOX_HINTS[names[i]] || [];
+    for (let j = 0; j < marks.length; j++) {
+      const m = flat(marks[j]);
+      if (!m || hay.indexOf(m) < 0) continue;
+      const addr = S.myAddrs.find((a) => folderName(a) === names[i]);
+      if (addr) return addr;
+    }
+  }
+  return '';
+}
+
+/**
+ * その1通が「どの箱に届いたか」。**宛先だけ**で決めます。
+ *
+ * ★上書き（hintBox）を混ぜません。二重を消すときの採点に使うので、
+ *   ここが動くと「元のほうを残す」という判断が狂います。
+ */
+function deliveredBox(row) {
   // 集めた先は受け口ごとに違います。会社の受け口から読んだメールの
   // 集めた先は会社のアドレスです
   const me = S.hosts[String(row[F.SRC] || '')] || '';
@@ -132,6 +165,11 @@ function folderOf(row) {
     if (me) return me;
   }
   return String(row[F.ADDR] || '(不明)');
+}
+
+/** 画面に出す箱。目印の上書きがあればそちらが勝ちます */
+function folderOf(row) {
+  return hintBox(row) || deliveredBox(row);
 }
 
 /**
@@ -258,7 +296,8 @@ function toMeOf(row) {
 function dedupe(rows) {
   const best = new Map();
   const noId = [];
-  const score = (r) => (String(r[F.ADDR] || '') === folderOf(r) ? 1 : 0);
+  // ★上書きではなく**本当の届け先**で採点します。元のほうを残すための点です
+  const score = (r) => (String(r[F.ADDR] || '') === deliveredBox(r) ? 1 : 0);
 
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
