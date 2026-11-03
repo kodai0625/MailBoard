@@ -368,6 +368,7 @@ function render() {
   renderCats();
   renderList();
   renderBulk();
+  renderReadAll();
   $('#app').dataset.busy = S.busy ? '1' : '';
   $('#busy').textContent = S.busy;
 }
@@ -496,6 +497,25 @@ function renderList() {
       +   '<div class="mail__tags"><span class="tag tag--' + k.id + '">' + esc(k.name) + '</span></div>'
       + '</div></li>';
   }
+}
+
+/**
+ * 「未読◯通を既読に」。
+ *
+ * ★「選ぶ」を押して、全部を選んで、既読にする——の3手を1手にします。
+ *   読まずに片づけたいメールのほうが多いので、そこがいちばん太い道です。
+ *
+ * ★いま絞り込んでいるぶんだけが対象です。だから
+ *   「iCloud の未読を全部」も「この差出人のぶんだけ」も、
+ *   先に絞ってからこのボタンを押せば済みます。
+ */
+function renderReadAll() {
+  const b = $('#readAllBtn');
+  if (!b) return;
+  let n = 0;
+  filtered().forEach((r) => { if (r[F.UNREAD]) n++; });
+  b.hidden = !n || S.picking;
+  if (n) b.textContent = '未読' + n.toLocaleString() + '通を既読に';
 }
 
 function renderBulk() {
@@ -681,6 +701,67 @@ function wrapBody(html, images) {
     + 'pre{white-space:pre-wrap;font:inherit;}'
     + '@media (prefers-color-scheme:dark){html,body{background:#fff;color:#1a1d1a;}}'
     + '</style></head><body>' + html + '</body></html>';
+}
+
+/**
+ * 左端から右へなぞると、一覧へ戻ります。
+ *
+ * ★本文は iframe の中です。iframe の中の指の動きは親の画面まで
+ *   届かないので、本文の上でなぞっても拾えません。そこで左端に
+ *   見えない帯（#dEdge）を重ねて、そこだけで受けています。
+ *
+ * ★横に動いたとはっきりするまで、指の動きを横取りしません。
+ *   先に横取りすると、端のあたりで縦に読もうとしたときに
+ *   スクロールできなくなります。
+ *
+ * ★指につれて画面も動かします。動かないと「効いていない」と思って
+ *   何度もなぞることになるためです。
+ */
+function bindEdgeBack() {
+  const sheet = $('#detail');
+  const edge = $('#dEdge');
+  if (!sheet || !edge) return;
+
+  let x0 = 0, y0 = 0, dx = 0, live = false, sideways = false;
+
+  const reset = () => {
+    live = false; sideways = false;
+    sheet.classList.remove('is-dragging');
+    sheet.style.transform = '';
+    sheet.style.opacity = '';
+  };
+
+  edge.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    x0 = t.clientX; y0 = t.clientY; dx = 0;
+    live = true; sideways = false;
+  }, { passive: true });
+
+  edge.addEventListener('touchmove', (e) => {
+    if (!live) return;
+    const t = e.touches[0];
+    dx = t.clientX - x0;
+    const dy = t.clientY - y0;
+    if (!sideways) {
+      if (Math.abs(dy) > Math.abs(dx)) { live = false; return; }   // 縦に読んでいる
+      if (dx < 8) return;                                          // まだ分からない
+      sideways = true;
+      sheet.classList.add('is-dragging');
+    }
+    e.preventDefault();
+    const d = Math.max(0, dx);
+    sheet.style.transform = 'translateX(' + d + 'px)';
+    sheet.style.opacity = String(Math.max(0.35, 1 - d / 520));
+  }, { passive: false });
+
+  edge.addEventListener('touchend', () => {
+    if (!live) { reset(); return; }
+    const far = sideways && dx > Math.min(70, window.innerWidth * 0.2);
+    reset();
+    if (far) closeDetail();
+  });
+
+  edge.addEventListener('touchcancel', reset);
 }
 
 function closeDetail() {
@@ -1326,6 +1407,7 @@ async function saveTpl() {
 
 async function boot() {
   bindEvents();
+  bindEdgeBack();
   Updater.start();
   loadAddrs();
 
@@ -1507,6 +1589,13 @@ function bindEvents() {
     if (!S.picking) S.sel.clear();
     $('#pickBtn').classList.toggle('is-on', S.picking);
     render();
+  });
+
+  on('#readAllBtn', 'click', () => {
+    S.sel.clear();
+    filtered().forEach((r) => { if (r[F.UNREAD]) S.sel.add(Rules.keyOf(r)); });
+    // markSelected が20通を超えるときだけ確かめます
+    markSelected(true);
   });
 
   on('#selAll', 'click', () => {

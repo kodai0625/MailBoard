@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="dd3fe73e6d">
+<meta name="app-version" content="ac77515423">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=dd3fe73e6d">
-<link rel="stylesheet" href="css/design.css?v=dd3fe73e6d">
+<link rel="stylesheet" href="css/style.css?v=ac77515423">
+<link rel="stylesheet" href="css/design.css?v=ac77515423">
 </head>
 <body>
 
@@ -96,6 +96,9 @@
       <div class="listbar">
         <span class="listbar__c" id="count"></span>
         <span class="spacer"></span>
+        <!-- ★いちばん使うので先頭に置きます。この帯は右にはみ出すので、
+             うしろに置くと iPhone では見えなくなります -->
+        <button class="pill pill--go" id="readAllBtn" hidden></button>
         <button class="pill" id="toMeBtn">宛先</button>
         <button class="pill" id="sendersBtn">差出人</button>
         <button class="pill" id="unreadBtn">未読だけ</button>
@@ -144,6 +147,10 @@
     <button class="pill pill--img" id="imgBtn">画像を表示</button>
   </div>
   <iframe id="dBody" class="body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+  <!-- ★左端から右へなぞると一覧へ戻ります。本文は iframe の中にあり、
+       中の指の動きは親の画面まで届かないので、端に細い帯を重ねて
+       そこで受けています。見えない帯です。 -->
+  <div class="edgeback" id="dEdge" aria-hidden="true"></div>
 </div>
 
 <!-- ===== 返信 ===== -->
@@ -270,11 +277,11 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=dd3fe73e6d"></script>
-<script src="js/store.js?v=dd3fe73e6d"></script>
-<script src="js/api.js?v=dd3fe73e6d"></script>
-<script src="js/update.js?v=dd3fe73e6d"></script>
-<script src="js/rules.js?v=dd3fe73e6d"></script>
-<script src="js/app.js?v=dd3fe73e6d"></script>
+<script src="js/config.js?v=ac77515423"></script>
+<script src="js/store.js?v=ac77515423"></script>
+<script src="js/api.js?v=ac77515423"></script>
+<script src="js/update.js?v=ac77515423"></script>
+<script src="js/rules.js?v=ac77515423"></script>
+<script src="js/app.js?v=ac77515423"></script>
 </body>
 </html>
