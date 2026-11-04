@@ -127,6 +127,7 @@ const Api = {
   pull(src, offset, limit) { return this.post(src, 'pull', { offset, limit }); },
   body(src, id) { return this.post(src, 'body', { id }); },
   read(src, ids, read) { return this.post(src, 'read', { ids, read }); },
+  unsub(src, id) { return this.post(src, 'unsub', { id }); },
   star(src, ids, on) { return this.post(src, 'star', { ids, on }); },
   reply(src, id, text, all, from) { return this.post(src, 'reply', { id, text, all, from }); },
   draft(src, id, text, all, from) { return this.post(src, 'draft', { id, text, all, from }); },

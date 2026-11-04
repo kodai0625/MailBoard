@@ -38,6 +38,8 @@ const S = {
   tpl: [],
   aliases: [],        // Gmail に登録ずみの送信者
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
+  group: true,        // 同じやり取りを1行にまとめるか
+  swiped: 0,          // 最後に横へなぞり終わった時刻
   images: false,      // 本文の画像を出すかどうか
   busy: '',
   scanning: false,
@@ -369,6 +371,52 @@ function filtered() {
   return out;
 }
 
+/**
+ * 同じやり取り（スレッド）を1行にまとめます。
+ *
+ *  ★番号（tid）は索引にずっと入っていたのに、画面では一度も
+ *    使っていませんでした。予約サイトは「受付」「確定」「変更」
+ *    「キャンセル」を別々に送ってくるので、1件の予約が3〜4行を
+ *    占めていました。
+ *
+ *  ★まとめるのは**見た目だけ**です。既読やフラグは1通ずつのまま
+ *    動かします。だから「まとめた行を既読にする」は、その中の
+ *    ぜんぶを既読にします。
+ *
+ *  ★同じ番号でも受け口が違えば別のやり取りです（番号は
+ *    Google アカウントごとのものなので）。受け口の印を頭に付けます。
+ */
+function threadKey(r) {
+  const tid = String(r[F.TID] || '');
+  return tid ? String(r[F.SRC] || '') + ':' + tid : '';
+}
+
+function groupRows(rows) {
+  const out = [];
+  const at = new Map();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const key = Rules.keyOf(r);
+    const tk = threadKey(r);
+    if (!tk) {                       // 番号が無いものは、まとめません
+      out.push({ r, n: 1, keys: [key], unread: !!r[F.UNREAD], flag: S.star.has(key) });
+      continue;
+    }
+    let g = at.get(tk);
+    if (!g) {
+      // 並びは新しい順なので、はじめに出てきたものがいちばん新しい
+      g = { r, n: 0, keys: [], unread: false, flag: false };
+      at.set(tk, g);
+      out.push(g);
+    }
+    g.n++;
+    g.keys.push(key);
+    if (r[F.UNREAD]) g.unread = true;      // 1通でも未読なら、その行は未読
+    if (S.star.has(key)) g.flag = true;
+  }
+  return out;
+}
+
 /** 箱ごとの通数と未読数 */
 function folderCounts() {
   const m = new Map();
@@ -404,6 +452,8 @@ function catCounts() {
  * ========================================================== */
 
 function render() {
+  const gb = $('#groupBtn');
+  if (gb) gb.classList.toggle('is-on', S.group);
   renderFolders();
   renderCats();
   renderList();
@@ -478,10 +528,16 @@ function renderCats() {
 
 function renderList() {
   const rows = filtered();
-  const show = rows.slice(0, S.shown);
+  const items = S.group
+    ? groupRows(rows)
+    : rows.map((r) => {
+        const k = Rules.keyOf(r);
+        return { r, n: 1, keys: [k], unread: !!r[F.UNREAD], flag: S.star.has(k) };
+      });
+  const show = items.slice(0, S.shown);
   const ul = $('#list');
 
-  if (!rows.length) {
+  if (!items.length) {
     ul.innerHTML = '<li class="empty">' + (S.rows.length
       ? 'ここには何もありません'
       : (S.demo ? '見本を読み込んでいます'
@@ -494,7 +550,12 @@ function renderList() {
     ul.innerHTML = show.map(item).join('');
   }
 
-  $('#count').textContent = rows.length ? rows.length.toLocaleString() + '通' : '';
+  // ★まとめたときは「何件に見えているか」と「本当は何通か」を並べます。
+  //   片方だけ出すと、既読にした数と合わなくて驚きます
+  $('#count').textContent = !rows.length ? ''
+    : (items.length === rows.length)
+      ? rows.length.toLocaleString() + '通'
+      : items.length.toLocaleString() + '件（' + rows.length.toLocaleString() + '通）';
 
   // ★「宛先」で絞っているとき、判別できない古いぶんがどれだけ
   //   あるかを出します。出さないと、絞った数を全部だと思ってしまいます
@@ -514,21 +575,25 @@ function renderList() {
         + '設定の「作り直す」→「続きを読み込む」で分かるようになります。'
       : '';
   }
-  $('#more').hidden = rows.length <= S.shown;
-  $('#more').textContent = 'あと ' + (rows.length - S.shown).toLocaleString() + '通を出す';
+  $('#more').hidden = items.length <= S.shown;
+  $('#more').textContent = 'あと ' + (items.length - S.shown).toLocaleString() + '件を出す';
 
-  function item(r) {
+  function item(g) {
+    const r = g.r;
     const id = Rules.keyOf(r);
     const k = CAT_BY_ID[S.cat.get(id)] || CAT_BY_ID.other;
-    const fl = S.star.has(id);
-    return '<li class="mail' + (r[F.UNREAD] ? ' is-unread' : '') + (S.sel.has(id) ? ' is-sel' : '') + '"'
-      + ' data-id="' + esc(id) + '">'
+    const fl = g.flag;
+    // まとめた行は、中のぜんぶが選ばれていてはじめて「選んだ」印にします
+    const sel = g.keys.every((x) => S.sel.has(x));
+    return '<li class="mail' + (g.unread ? ' is-unread' : '') + (sel ? ' is-sel' : '') + '"'
+      + ' data-id="' + esc(id) + '" data-keys="' + esc(g.keys.join(' ')) + '">'
       + (S.picking
-          ? '<span class="mail__box">' + (S.sel.has(id) ? icon('check') : '') + '</span>'
+          ? '<span class="mail__box">' + (sel ? icon('check') : '') + '</span>'
           : '<span class="mail__dot"></span>')
       + '<div class="mail__b">'
       +   '<div class="mail__top">'
       +     '<span class="mail__from">' + esc(r[F.NAME] || r[F.FROM]) + '</span>'
+      +     (g.n > 1 ? '<span class="mail__n">' + g.n + '通</span>' : '')
       +     (fl ? '<span class="mail__flag">' + icon('flag') + '</span>' : '')
       +     '<span class="mail__date">' + fmtDate(r[F.DATE]) + '</span>'
       +   '</div>'
@@ -719,6 +784,13 @@ async function openMail(key) {
   $('#dCat').innerHTML = '<span class="tag tag--' + k.id + '">' + esc(k.name) + '</span>'
     + '<span class="why">' + esc(why) + '</span>';
   paintStarBtn();
+  paintThread(row);
+  // ★配信停止のボタンは、機械が送ってきたものにだけ出します。
+  //   人からのメールに「配信を止める」が並んでいると落ち着きません
+  const ub = $('#unsubBtn');
+  if (ub) ub.hidden = S.demo || !Rules.isMachine(row[F.FROM]);
+  const un = $('#dUnsub');
+  if (un) { un.hidden = true; un.innerHTML = ''; }
 
   // ★先に面を出してから本文を入れます。順番を逆にすると、
   //   display:none のあいだに入れることになり、iframe が
@@ -757,6 +829,76 @@ async function openMail(key) {
     }
   } catch (e) {
     $('#dBody').srcdoc = wrapBody('<p style="color:#b00">' + esc(String(e.message || e)) + '</p>', false);
+  }
+}
+
+/**
+ * 同じやり取りの、ほかのメールを並べます。
+ *
+ * ★まとめた行から開くと、見えるのはいちばん新しい1通だけです。
+ *   「確定の前に何と言ってきたか」を見たいことがあるので、
+ *   そこから行き来できるようにします。1通しかなければ出しません。
+ */
+function paintThread(row) {
+  const box = $('#dThread');
+  if (!box) return;
+  const tk = threadKey(row);
+  const here = Rules.keyOf(row);
+  const mates = tk ? S.rows.filter((r) => threadKey(r) === tk) : [];
+  if (mates.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="dthread__t">このやり取り ' + mates.length + '通</div>'
+    + mates.map((r) => {
+        const k = Rules.keyOf(r);
+        return '<button class="dthread__i' + (k === here ? ' is-now' : '')
+          + (r[F.UNREAD] ? ' is-unread' : '') + '" data-mate="' + esc(k) + '">'
+          + '<span class="dthread__d">' + esc(fmtDate(r[F.DATE])) + '</span>'
+          + '<span class="dthread__f">' + esc(r[F.NAME] || r[F.FROM]) + '</span>'
+          + '<span class="dthread__s">' + esc(r[F.SUBJ] || '（件名なし）') + '</span>'
+          + '</button>';
+      }).join('');
+}
+
+/**
+ * 配信を止めます（ワンクリック購読解除）。
+ *
+ * ★押すと**外に出ていきます。**取り消すには、また自分で登録し直す
+ *   ことになるので、押す前に必ず一度確かめます。
+ *
+ * ★こちらから止められるのは、決められた形（https へ POST）の
+ *   ものだけです。ページを開く形・メールを送る形は、住所を出すだけで
+ *   **勝手には進めません。**とくにメールを出すのは人が決めることです。
+ */
+async function unsubscribe() {
+  const key = S.openKey; if (!key) return;
+  const row = rowByKey(key); if (!row) return;
+  const who = row[F.NAME] ? (row[F.NAME] + '（' + row[F.FROM] + '）') : row[F.FROM];
+  if (!confirm(who + '\n\nからの配信を止めます。\n'
+             + 'また受け取りたくなったときは、自分で登録し直すことになります。\n\nよろしいですか？')) return;
+
+  const box = $('#dUnsub');
+  const show = (html) => { if (box) { box.hidden = false; box.innerHTML = html; } };
+  try {
+    S.busy = '止めています…'; render();
+    const d = await Api.unsub(String(row[F.SRC] || ''), String(row[F.ID]));
+    if (d.mode === 'done') {
+      show('<b>止めました。</b>これから届かなくなります（送り元の処理に少し時間がかかることがあります）');
+      toast('配信を止めました');
+    } else if (d.mode === 'open') {
+      show('こちらからは止められない形でした。'
+         + '<a href="' + esc(d.url) + '" target="_blank" rel="noopener noreferrer">止めるページを開く</a>'
+         + (d.code ? '<br><span class="muted">送り元の返事： ' + esc(String(d.code)) + '</span>' : ''));
+    } else if (d.mode === 'mail') {
+      show('メールを送って止める形でした。<b>こちらからは送りません。</b><br>'
+         + '宛先： <code>' + esc(d.to) + '</code> に空のメールを送ると止まります');
+    } else {
+      show('このメールには、止めるための口が入っていませんでした。'
+         + '本文の下のほうにある「配信停止」のリンクから止めてください');
+    }
+  } catch (e) {
+    toast(String(e.message || e), true);
+  } finally {
+    S.busy = ''; render();
   }
 }
 
@@ -863,6 +1005,96 @@ function bindEdgeBack() {
   });
 
   edge.addEventListener('touchcancel', reset);
+}
+
+/**
+ * 一覧の行を横になぞる。
+ *
+ *   右へ → 既読／未読の切り替え
+ *   左へ → フラグの付け外し
+ *
+ * ★まとめた行は、その中のぜんぶに効きます。
+ * ★「選ぶ」の最中は効かせません。印を付けにいく指と喧嘩します。
+ * ★横と分かるまで指の動きを横取りしないので、縦のスクロールは残ります。
+ * ★なぞり終わったあとの一瞬は、押したことにしません。
+ *   そうしないと、なぞるたびに本文が開いてしまいます。
+ */
+function bindSwipe() {
+  const list = $('#list');
+  if (!list) return;
+
+  const hint = document.createElement('div');
+  hint.className = 'swipehint';
+  hint.hidden = true;
+  document.body.appendChild(hint);
+
+  let li = null, x0 = 0, y0 = 0, dx = 0, live = false, sideways = false;
+
+  const clear = () => {
+    if (li) { li.style.transform = ''; li.classList.remove('is-swiping'); }
+    hint.hidden = true;
+    li = null; live = false; sideways = false;
+  };
+
+  const keysOf = (el) => String(el.dataset.keys || el.dataset.id || '').split(' ').filter(Boolean);
+  const allRead = (keys) => keys.every((k) => { const r = rowByKey(k); return r && !r[F.UNREAD]; });
+  const allFlag = (keys) => keys.every((k) => S.star.has(k));
+
+  list.addEventListener('touchstart', (e) => {
+    if (S.picking || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    const el = t.target.closest ? t.target.closest('.mail') : null;
+    if (!el) return;
+    li = el; x0 = t.clientX; y0 = t.clientY; dx = 0; live = true; sideways = false;
+  }, { passive: true });
+
+  list.addEventListener('touchmove', (e) => {
+    if (!live || !li) return;
+    // ★なぞっている途中で一覧が描き直されると、掴んでいた行は
+    //   画面から外れます。そのまま続けると、うしろの帯だけが
+    //   取り残されて消えなくなります
+    if (!li.isConnected) { clear(); return; }
+    const t = e.touches[0];
+    dx = t.clientX - x0;
+    const dy = t.clientY - y0;
+    if (!sideways) {
+      if (Math.abs(dy) > Math.abs(dx)) { live = false; return; }   // 縦に読んでいる
+      if (Math.abs(dx) < 10) return;                               // まだ分からない
+      sideways = true;
+      li.classList.add('is-swiping');
+      const r = li.getBoundingClientRect();
+      hint.style.left = r.left + 'px';
+      hint.style.top = r.top + 'px';
+      hint.style.width = r.width + 'px';
+      hint.style.height = r.height + 'px';
+      hint.hidden = false;
+    }
+    e.preventDefault();
+    const d = Math.max(-150, Math.min(150, dx));
+    li.style.transform = 'translateX(' + d + 'px)';
+    const keys = keysOf(li);
+    const right = d > 0;
+    hint.classList.toggle('is-read', right);
+    hint.classList.toggle('is-flag', !right);
+    hint.style.justifyContent = right ? 'flex-start' : 'flex-end';
+    hint.textContent = right
+      ? (allRead(keys) ? '未読に戻す' : '既読にする')
+      : (allFlag(keys) ? 'フラグを外す' : 'フラグを付ける');
+  }, { passive: false });
+
+  list.addEventListener('touchend', () => {
+    if (!live || !li || !li.isConnected) { clear(); return; }
+    const far = sideways && Math.abs(dx) > 70;
+    const right = dx > 0;
+    const keys = keysOf(li);
+    clear();
+    if (!far || !keys.length) return;
+    S.swiped = Date.now();              // この直後の「押した」は無かったことに
+    if (right) { S.sel = new Set(keys); markSelected(!allRead(keys)); }
+    else markStar(keys, !allFlag(keys));
+  });
+
+  list.addEventListener('touchcancel', clear);
 }
 
 function closeDetail() {
@@ -1507,8 +1739,13 @@ async function saveTpl() {
  * ========================================================== */
 
 async function boot() {
+  try {
+    const g = localStorage.getItem(APP.storageKey + ':group');
+    if (g !== null) S.group = (g === '1');
+  } catch (e) { /* 使えない置きかたもあります */ }
   bindEvents();
   bindEdgeBack();
+  bindSwipe();
   Updater.start();
   loadAddrs();
 
@@ -1664,9 +1901,16 @@ function bindEvents() {
 
   on('#list', 'click', (e) => {
     const li = e.target.closest('.mail'); if (!li) return;
+    // なぞり終わりの余韻で本文が開かないように
+    if (Date.now() - (S.swiped || 0) < 500) return;
     const id = li.dataset.id;
     if (S.picking) {
-      if (S.sel.has(id)) S.sel.delete(id); else S.sel.add(id);
+      // ★まとめた行を選んだら、その中のぜんぶを選びます。いちばん新しい
+      //   1通だけ既読にしても、行は未読のままで「押したのに消えない」
+      //   ように見えるためです
+      const keys = String(li.dataset.keys || id).split(' ').filter(Boolean);
+      const on = keys.every((k) => S.sel.has(k));
+      keys.forEach((k) => { if (on) S.sel.delete(k); else S.sel.add(k); });
       render();
     } else {
       openMail(id);
@@ -1690,6 +1934,12 @@ function bindEvents() {
     if (!S.picking) S.sel.clear();
     $('#pickBtn').classList.toggle('is-on', S.picking);
     render();
+  });
+
+  on('#groupBtn', 'click', () => {
+    S.group = !S.group;
+    try { localStorage.setItem(APP.storageKey + ':group', S.group ? '1' : '0'); } catch (e) { /* 使えない置きかたもあります */ }
+    S.shown = APP.pageSize; S.sel.clear(); render();
   });
 
   on('#readAllBtn', 'click', () => {
@@ -1744,6 +1994,13 @@ function bindEvents() {
   });
 
   /* --- 本文 --- */
+  on('#dThread', 'click', (e) => {
+    const b = e.target.closest('[data-mate]'); if (!b) return;
+    if (b.dataset.mate !== S.openKey) openMail(b.dataset.mate);
+  });
+
+  on('#unsubBtn', 'click', unsubscribe);
+
   on('#dClose', 'click', closeDetail);
   on('#imgBtn', 'click', () => { S.images = true; paintBody(); });
   on('#replyBtn', 'click', openReply);

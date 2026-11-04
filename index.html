@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="d2bdfaf363">
+<meta name="app-version" content="731e27d109">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=d2bdfaf363">
-<link rel="stylesheet" href="css/design.css?v=d2bdfaf363">
+<link rel="stylesheet" href="css/style.css?v=731e27d109">
+<link rel="stylesheet" href="css/design.css?v=731e27d109">
 </head>
 <body>
 
@@ -101,6 +101,7 @@
         <button class="pill pill--go" id="readAllBtn" hidden></button>
         <button class="pill" id="toMeBtn">宛先</button>
         <button class="pill" id="sendersBtn">差出人</button>
+        <button class="pill" id="groupBtn">まとめる</button>
         <button class="pill" id="unreadBtn">未読だけ</button>
         <button class="pill" id="flagBtn">フラグ</button>
         <button class="pill" id="pickBtn">選ぶ</button>
@@ -136,6 +137,7 @@
     <span class="spacer"></span>
     <button class="pill" id="starBtn">フラグを付ける</button>
     <button class="pill" id="moveBtn">分類を変える</button>
+    <button class="pill" id="unsubBtn" hidden>配信を止める</button>
     <button class="pill" id="dUnread">未読に戻す</button>
     <button class="pill pill--go" id="replyBtn">返信</button>
   </div>
@@ -145,6 +147,10 @@
     <div class="meta__l"><span id="dDate"></span></div>
     <div class="meta__l" id="dCat"></div>
     <button class="pill pill--img" id="imgBtn">画像を表示</button>
+    <!-- 配信停止のお知らせ。押したときだけ出ます -->
+    <p class="unsub" id="dUnsub" hidden></p>
+    <!-- 同じやり取りのほかのメール。1通しかないときは出ません -->
+    <div class="dthread" id="dThread" hidden></div>
   </div>
   <iframe id="dBody" class="body" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
   <!-- ★左端から右へなぞると一覧へ戻ります。本文は iframe の中にあり、
@@ -277,11 +283,11 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=d2bdfaf363"></script>
-<script src="js/store.js?v=d2bdfaf363"></script>
-<script src="js/api.js?v=d2bdfaf363"></script>
-<script src="js/update.js?v=d2bdfaf363"></script>
-<script src="js/rules.js?v=d2bdfaf363"></script>
-<script src="js/app.js?v=d2bdfaf363"></script>
+<script src="js/config.js?v=731e27d109"></script>
+<script src="js/store.js?v=731e27d109"></script>
+<script src="js/api.js?v=731e27d109"></script>
+<script src="js/update.js?v=731e27d109"></script>
+<script src="js/rules.js?v=731e27d109"></script>
+<script src="js/app.js?v=731e27d109"></script>
 </body>
 </html>

@@ -245,6 +245,44 @@ body.is-modal { overflow: hidden; }
 
 .body { flex: 1; width: 100%; border: 0; background: #fff; }
 
+/* 一覧の行を横になぞったときに、うしろから出る帯 */
+.list { position: relative; }
+.swipehint {
+  position: fixed; z-index: 1; display: flex; align-items: center;
+  padding: 0 18px; font-size: 13px; font-weight: 600; color: #fff;
+  pointer-events: none; overflow: hidden; white-space: nowrap;
+}
+.swipehint.is-read { background: var(--accent); }
+.swipehint.is-flag { background: #b5802b; }
+/* ★なぞっている行は、うしろの帯が透けないように地の色を持たせます */
+.mail.is-swiping { position: relative; z-index: 2; background: var(--surface); }
+
+/* 配信停止のお知らせ */
+.unsub { margin: 9px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text);
+         background: var(--surface-2); border: 1px solid var(--line);
+         border-radius: var(--radius); padding: 9px 11px; }
+.unsub a { color: var(--accent); }
+.unsub code { word-break: break-all; }
+
+/* まとめた行の通数 */
+.mail__n { font-size: 11px; color: var(--accent); border: 1px solid var(--line);
+           border-radius: 9px; padding: 0 6px; margin-left: 6px; white-space: nowrap;
+           flex: 0 0 auto; }
+
+/* 本文の画面に出す「同じやり取り」 */
+.dthread { margin-top: 9px; border-top: 1px solid var(--line-2); padding-top: 8px; }
+.dthread__t { font-size: 12px; color: var(--text-sub); margin-bottom: 5px; }
+.dthread__i { display: flex; gap: 8px; align-items: baseline; width: 100%;
+              text-align: left; background: none; border: 0; cursor: pointer;
+              padding: 5px 6px; border-radius: 7px; font-size: 12.5px; color: var(--text); }
+.dthread__i:hover { background: var(--surface-2); }
+.dthread__i.is-now { background: var(--surface-2); font-weight: 600; }
+.dthread__i.is-unread .dthread__s { font-weight: 600; }
+.dthread__d { color: var(--text-weak); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.dthread__f { color: var(--text-sub); flex: 0 0 auto; max-width: 8em;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dthread__s { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 左端から右へなぞって戻るための帯。幅は iPhone の戻る操作に合わせて22px */
 .edgeback { position: absolute; left: 0; top: 0; bottom: 0; width: 22px;
             z-index: 5; touch-action: pan-y; }
