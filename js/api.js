@@ -130,6 +130,7 @@ const Api = {
   unsub(src, id) { return this.post(src, 'unsub', { id }); },
   star(src, ids, on) { return this.post(src, 'star', { ids, on }); },
   reply(src, id, text, all, from) { return this.post(src, 'reply', { id, text, all, from }); },
+  send(src, m) { return this.post(src, 'send', m); },
   draft(src, id, text, all, from) { return this.post(src, 'draft', { id, text, all, from }); },
   aliases(src) { return this.post(src, 'aliases', {}); },
   rules(src) { return this.post(src, 'rules', {}); },

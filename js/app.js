@@ -37,6 +37,7 @@ const S = {
   main: '',           // 決まりごととテンプレを置いてある受け口
   tpl: [],
   aliases: [],        // Gmail に登録ずみの送信者
+  aliasSrc: {},       // その送信者は、どの受け口のものか
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
   swiped: 0,          // 最後に横へなぞり終わった時刻
@@ -1145,6 +1146,98 @@ function useTemplate(i) {
   $('#rText').focus();
 }
 
+/* ============================================================
+ *  新しく書く（返信ではないメール）
+ *
+ *  ★ホテルへの予約確認のように、**こちらから出す**ものがあります。
+ *    返信しかできないと、予約サイトへ返すことになって届きません。
+ * ========================================================== */
+
+function openCompose() {
+  if (S.demo) { toast('見本なので送れません'); return; }
+  if (!S.main) { toast('先に受け口をつないでください', true); return; }
+  $('#cTo').value = '';
+  $('#cCc').value = '';
+  $('#cSubj').value = '';
+  $('#cText').value = '';
+
+  const from = $('#cFrom');
+  if (S.aliases.length > 1) {
+    from.innerHTML = S.aliases
+      .map((a) => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
+    $('#cFromWrap').hidden = false;
+  } else {
+    $('#cFromWrap').hidden = true;
+  }
+
+  $('#cTpl').innerHTML = S.tpl.length
+    ? S.tpl.map((t, i) => '<button class="tplchip" data-ctpl="' + i + '">' + esc(t[1]) + '</button>').join('')
+    : '<span class="muted">テンプレはまだありません。設定から足せます</span>';
+
+  $('#compose').hidden = false;
+  document.body.classList.add('is-modal');
+  // ★ふつうに focus すると、そのらんを見せようとして中身が少し
+  //   下にずれ、「宛先」の見出しが隠れます
+  $('#cTo').focus({ preventScroll: true });
+  const body = $('#compose .sheet__body');
+  if (body) body.scrollTop = 0;
+}
+
+function closeCompose() {
+  $('#compose').hidden = true;
+  if ($('#detail').hidden && $('#settings').hidden && $('#senders').hidden) {
+    document.body.classList.remove('is-modal');
+  }
+}
+
+/**
+ * ★{name} はここでは置き換えません。返信とちがって相手の名前が
+ *   分からないので、空にすると「 様」だけが残ります。
+ *   そのまま出しておけば、埋め忘れに気づけます。
+ */
+function useTemplateCompose(i) {
+  const t = S.tpl[i];
+  if (!t) return;
+  const cur = $('#cText').value;
+  const body = String(t[2] || '');
+  $('#cText').value = cur ? cur + '\n\n' + body : body;
+  $('#cText').focus();
+}
+
+async function sendNew(asDraft) {
+  const to = $('#cTo').value.trim();
+  const text = $('#cText').value.trim();
+  if (!to) { toast('宛先が空です', true); return; }
+  if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+/.test(to)) { toast('宛先のかたちが違うようです', true); return; }
+  if (!text) { toast('本文が空です', true); return; }
+
+  const from = $('#cFromWrap').hidden ? '' : $('#cFrom').value;
+  // ★その差出人を持っている受け口に頼みます
+  const src = (from && S.aliasSrc[from]) || S.main;
+  const subj = $('#cSubj').value.trim();
+
+  // ★新しく書くときだけ、送る前に一度確かめます。返信とちがって
+  //   宛先を自分で打つので、打ち間違えると知らない人に届きます
+  if (!asDraft && !confirm(to + '\n\nに送ります。'
+      + (from ? '\n差出人： ' + from : '')
+      + '\n件名： ' + (subj || '（なし）')
+      + '\n\nよろしいですか？')) return;
+
+  try {
+    S.busy = asDraft ? '下書きにしています…' : '送っています…'; render();
+    await Api.send(src, {
+      to: to, cc: $('#cCc').value.trim(), subject: subj, text: text,
+      from: from, draft: !!asDraft,
+    });
+    closeCompose();
+    toast(asDraft ? '下書きに入れました' : '送りました');
+  } catch (e) {
+    toast(String(e.message || e), true);
+  } finally {
+    S.busy = ''; render();
+  }
+}
+
 async function sendReply(asDraft) {
   const text = $('#rText').value.trim();
   if (!text) { toast('本文が空です', true); return; }
@@ -1817,7 +1910,11 @@ async function boot() {
         S.ok[src] = true;
         S.err[src] = '';
         (p.aliases || []).forEach((a) => {
-          if (a && aliases.indexOf(a) < 0) aliases.push(a);
+          if (!a) return;
+          if (aliases.indexOf(a) < 0) aliases.push(a);
+          // ★どの受け口のものかを覚えます。会社のアドレスから送るのに
+          //   個人の受け口へ頼んでも、向こうは知らない差出人として断ります
+          if (!S.aliasSrc[a]) S.aliasSrc[a] = src;
         });
       } catch (e) {
         S.ok[src] = false;
@@ -2000,6 +2097,15 @@ function bindEvents() {
   });
 
   on('#unsubBtn', 'click', unsubscribe);
+
+  on('#newBtn', 'click', openCompose);
+  on('#cClose', 'click', closeCompose);
+  on('#cSend', 'click', () => sendNew(false));
+  on('#cDraft', 'click', () => sendNew(true));
+  on('#cTpl', 'click', (e) => {
+    const b = e.target.closest('[data-ctpl]'); if (!b) return;
+    useTemplateCompose(Number(b.dataset.ctpl));
+  });
 
   on('#dClose', 'click', closeDetail);
   on('#imgBtn', 'click', () => { S.images = true; paintBody(); });
@@ -2206,6 +2312,7 @@ function bindEvents() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#reply').hidden) { $('#reply').hidden = true; return; }
+    if (!$('#compose').hidden) { closeCompose(); return; }
     if (!$('#senders').hidden) {
       $('#senders').hidden = true; document.body.classList.remove('is-modal'); return;
     }

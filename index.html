@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="5c7eb25ea7">
+<meta name="app-version" content="69cb15b125">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=5c7eb25ea7">
-<link rel="stylesheet" href="css/design.css?v=5c7eb25ea7">
+<link rel="stylesheet" href="css/style.css?v=69cb15b125">
+<link rel="stylesheet" href="css/design.css?v=69cb15b125">
 </head>
 <body>
 
@@ -62,6 +62,7 @@
   <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.6 4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-gear" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M12 2.8v2.4M12 18.8v2.4M4.5 4.5l1.7 1.7M17.8 17.8l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.5 19.5l1.7-1.7M17.8 6.2l1.7-1.7"/></g></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.6 5.4 8 12l6.6 6.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 19.6h4L18.9 9.1a2.9 2.9 0 0 0-4-4L4.4 15.6v4z"/><path d="m13.7 6.4 4 4"/></g></symbol>
   <symbol id="i-mail" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.9" y="5.2" width="18.2" height="13.6" rx="2.4"/><path d="m3.6 7.2 8.4 5.8 8.4-5.8"/></g></symbol>
 </svg>
 
@@ -75,6 +76,7 @@
         <span class="app-title__mark">◆</span>
         <span class="app-title__main">Mail Board</span>
       </h1>
+      <button class="iconbtn" id="newBtn" aria-label="新しく書く"><svg class="ico"><use href="#i-pen"/></svg></button>
       <button class="iconbtn" id="gear" aria-label="設定">⚙</button>
     </div>
     <div class="hd__search">
@@ -174,6 +176,34 @@
     <div class="tplbar" id="rTpl"></div>
     <textarea id="rText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
     <p class="muted small">送るのは「送る」を押したときだけです。まず「下書きに入れる」でも構いません。</p>
+  </div>
+</div>
+
+<!-- ===== 新しく書く ===== -->
+<div class="sheet sheet--sub" id="compose" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="cClose" aria-label="閉じる"><svg class="ico"><use href="#i-back"/></svg></button>
+    <h2 class="sheet__t">新しく書く</h2>
+    <span class="spacer"></span>
+    <button class="pill" id="cDraft">下書きに入れる</button>
+    <button class="pill pill--go" id="cSend">送る</button>
+  </div>
+  <div class="sheet__body">
+    <label class="lbl">宛先</label>
+    <input id="cTo" type="email" autocomplete="off" placeholder="aaa@example.com（, で区切ると複数）">
+    <label class="lbl">Cc（空のままで構いません）</label>
+    <input id="cCc" type="email" autocomplete="off">
+    <p class="muted" id="cFromWrap" hidden>差出人： <select id="cFrom"></select></p>
+    <label class="lbl">件名</label>
+    <input id="cSubj" autocomplete="off">
+    <label class="lbl">本文</label>
+    <div class="tplbar" id="cTpl"></div>
+    <textarea id="cText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
+    <p class="muted small">
+      テンプレの <b>{name}</b> は、<b>返信のときだけ</b>相手の名前に変わります。
+      ここでは残るので、手で書き換えてください。<br>
+      送ったメールは Gmail の「送信済み」に入ります。この一覧には出ません（受信したものだけを読んでいるため）。
+    </p>
   </div>
 </div>
 
@@ -283,11 +313,11 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=5c7eb25ea7"></script>
-<script src="js/store.js?v=5c7eb25ea7"></script>
-<script src="js/api.js?v=5c7eb25ea7"></script>
-<script src="js/update.js?v=5c7eb25ea7"></script>
-<script src="js/rules.js?v=5c7eb25ea7"></script>
-<script src="js/app.js?v=5c7eb25ea7"></script>
+<script src="js/config.js?v=69cb15b125"></script>
+<script src="js/store.js?v=69cb15b125"></script>
+<script src="js/api.js?v=69cb15b125"></script>
+<script src="js/update.js?v=69cb15b125"></script>
+<script src="js/rules.js?v=69cb15b125"></script>
+<script src="js/app.js?v=69cb15b125"></script>
 </body>
 </html>
