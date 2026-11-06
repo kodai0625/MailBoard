@@ -257,6 +257,12 @@ body.is-modal { overflow: hidden; }
 /* ★なぞっている行は、うしろの帯が透けないように地の色を持たせます */
 .mail.is-swiping { position: relative; z-index: 2; background: var(--surface); }
 
+/* AI に書いてもらう、の行 */
+.airow { display: flex; gap: 8px; margin-bottom: 9px; }
+.airow input { flex: 1; min-width: 0; }
+.airow .pill { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 520px) { .airow { flex-wrap: wrap; } .airow .pill { width: 100%; } }
+
 /* 配信停止のお知らせ */
 .unsub { margin: 9px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text);
          background: var(--surface-2); border: 1px solid var(--line);

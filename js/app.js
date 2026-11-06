@@ -1128,6 +1128,8 @@ function openReply() {
     $('#rFromWrap').hidden = true;
   }
   $('#rText').value = '';
+  const ar = $('#rAiRow');
+  if (ar) { ar.hidden = S.demo || !AI.ready(); $('#rAiNote').value = ''; }
   $('#rTpl').innerHTML = S.tpl.length
     ? S.tpl.map((t, i) => '<button class="tplchip" data-tpl="' + i + '">' + esc(t[1]) + '</button>').join('')
     : '<span class="muted">テンプレはまだありません。設定から足せます</span>';
@@ -1170,6 +1172,8 @@ function openCompose() {
     $('#cFromWrap').hidden = true;
   }
 
+  const car = $('#cAiRow');
+  if (car) { car.hidden = !AI.ready(); $('#cAiNote').value = ''; }
   $('#cTpl').innerHTML = S.tpl.length
     ? S.tpl.map((t, i) => '<button class="tplchip" data-ctpl="' + i + '">' + esc(t[1]) + '</button>').join('')
     : '<span class="muted">テンプレはまだありません。設定から足せます</span>';
@@ -1230,12 +1234,98 @@ async function sendNew(asDraft) {
       from: from, draft: !!asDraft,
     });
     closeCompose();
+    if (!asDraft) {
+      AI.learn({ box: composeBox(), subject: subj, text: text });
+    }
     toast(asDraft ? '下書きに入れました' : '送りました');
   } catch (e) {
     toast(String(e.message || e), true);
   } finally {
     S.busy = ''; render();
   }
+}
+
+/* ============================================================
+ *  AI に書いてもらう
+ *
+ *  ★書くのは Mac の Hub Board の中の Claude です（js/ai.js）。
+ *    こちらからは、メールの中身と「どう返すか」を渡すだけです。
+ *
+ *  ★返ってきた文は**足します。上書きしません。**
+ *    自分で打った文が消えるほうが困るためです。
+ * ========================================================== */
+async function aiWrite(where) {
+  const isNew = (where === 'new');
+  const noteEl = $(isNew ? '#cAiNote' : '#rAiNote');
+  const textEl = $(isNew ? '#cText' : '#rText');
+  const btn = $(isNew ? '#cAiGo' : '#rAiGo');
+  if (!noteEl || !textEl || !btn) return;
+
+  let m;
+  if (isNew) {
+    m = {
+      mode: 'new', box: composeBox(),
+      to: $('#cTo').value.trim(), subject: $('#cSubj').value.trim(),
+      note: noteEl.value.trim(),
+    };
+  } else {
+    const row = rowByKey(S.openKey);
+    if (!row) return;
+    const d = S._body || {};
+    m = {
+      mode: 'reply', box: folderName(folderOf(row)) || '',
+      from: String(row[F.FROM] || ''), fromName: String(row[F.NAME] || ''),
+      subject: String(row[F.SUBJ] || ''),
+      // 本文がまだ来ていなければ、索引にある冒頭だけで書いてもらいます
+      body: String(d.text || '').trim() || stripTags(String(d.html || '')) || String(row[F.SNIP] || ''),
+      snippet: String(row[F.SNIP] || ''),
+      note: noteEl.value.trim(),
+    };
+  }
+
+  const was = btn.textContent;
+  btn.disabled = true;
+  try {
+    btn.textContent = '書いています…';
+    const text = await AI.write(m, (sec) => { btn.textContent = '書いています… ' + sec + '秒'; });
+    const cur = textEl.value;
+    textEl.value = cur ? cur + '\n\n' + text : text;
+    textEl.focus();
+    noteEl.value = '';
+    toast('書けました。読んでから送ってください');
+  } catch (e) {
+    toast(String(e.message || e), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = was;
+  }
+}
+
+/**
+ * 新しく書くときの「箱」。
+ * ★全受信を見ているときは箱が決まらないので、差出人に選んだ
+ *   アドレスから決めます。箱が決まらないと、手本も覚え書きも効きません。
+ */
+function composeBox() {
+  if (S.folder) return folderName(S.folder) || '';
+  const w = $('#cFromWrap');
+  const from = (w && !w.hidden) ? $('#cFrom').value : (S.hosts[S.main] || '');
+  return from ? (folderName(from) || '') : '';
+}
+
+/** 本文の HTML から、ざっくり文字だけ取り出します（AI に渡すため） */
+function stripTags(html) {
+  if (!html) return '';
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 async function sendReply(asDraft) {
@@ -1255,6 +1345,10 @@ async function sendReply(asDraft) {
     if (asDraft) await Api.draft(src, id, text, all, from);
     else await Api.reply(src, id, text, all, from);
     $('#reply').hidden = true;
+    // ★送った文を手本として覚えてもらいます（使うほど自分の言い回しに近づく）
+    if (!asDraft) {
+      AI.learn({ box: folderName(folderOf(row)) || '', subject: String(row[F.SUBJ] || ''), text });
+    }
     toast(asDraft ? '下書きに入れました' : '送りました');
   } catch (e) {
     toast(String(e.message || e), true);
@@ -1750,6 +1844,7 @@ function renderRules() {
   const boxes = '<option value="">どの箱でも</option>'
     + S.myAddrs.map((a) => '<option value="' + esc(a) + '">' + esc(folderName(a)) + 'だけ</option>').join('');
   $('#ruleBox').innerHTML = boxes;
+  renderAi();
   fillRuleCats();
   renderBuiltIn();
 }
@@ -1798,6 +1893,17 @@ function renderBuiltIn() {
       + '仕入先や取引先は会社ごとに違うので、一覧の「差出人」から足してください。'
       + '<b>自分で足したもののほうが先に効きます。</b></p>';
   }).join('');
+}
+
+/** AI の設定の、いまの様子 */
+function renderAi() {
+  const u = $('#aiUrl'), st = $('#aiState');
+  if (!u || !st) return;
+  u.value = AI.url() ? AI.url() + '/?t=' + AI.token() : '';
+  st.innerHTML = AI.ready()
+    ? '<b>つながる先が入っています。</b>返信と「新しく書く」に「AIに書いてもらう」が出ます。'
+      + 'Mac の Hub Board が動いているときだけ使えます。'
+    : 'まだ入っていません。入れると、返信の画面に「AIに書いてもらう」が出ます。';
 }
 
 function renderTpl() {
@@ -2097,6 +2203,28 @@ function bindEvents() {
   });
 
   on('#unsubBtn', 'click', unsubscribe);
+
+  on('#aiSave', 'click', () => {
+    const r = AI.remember($('#aiUrl').value);
+    if (!r.ok) { toast(r.why, true); return; }
+    renderAi();
+    toast(r.empty ? '消しました' : '覚えました');
+  });
+
+  on('#aiProfLoad', 'click', async () => {
+    if (!AI.ready()) { toast('先に上の欄を入れてください', true); return; }
+    try { $('#aiProfile').value = await AI.profile(); toast('読み込みました'); }
+    catch (e) { toast(String(e.message || e), true); }
+  });
+
+  on('#aiProfSave', 'click', async () => {
+    if (!AI.ready()) { toast('先に上の欄を入れてください', true); return; }
+    try { await AI.saveProfile($('#aiProfile').value); toast('保存しました'); }
+    catch (e) { toast(String(e.message || e), true); }
+  });
+
+  on('#rAiGo', 'click', () => aiWrite('reply'));
+  on('#cAiGo', 'click', () => aiWrite('new'));
 
   on('#newBtn', 'click', openCompose);
   on('#cClose', 'click', closeCompose);

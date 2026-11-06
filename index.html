@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="69cb15b125">
+<meta name="app-version" content="b80af1ef3f">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=69cb15b125">
-<link rel="stylesheet" href="css/design.css?v=69cb15b125">
+<link rel="stylesheet" href="css/style.css?v=b80af1ef3f">
+<link rel="stylesheet" href="css/design.css?v=b80af1ef3f">
 </head>
 <body>
 
@@ -173,6 +173,10 @@
   <div class="sheet__body">
     <p class="muted">宛先： <span id="rTo"></span></p>
     <p class="muted" id="rFromWrap" hidden>差出人： <select id="rFrom"></select></p>
+    <div class="airow" id="rAiRow" hidden>
+      <input id="rAiNote" autocomplete="off" placeholder="どう返すか、ひとことで（例：お礼と、到着は20時ごろ）">
+      <button class="pill pill--go" id="rAiGo">AIに書いてもらう</button>
+    </div>
     <div class="tplbar" id="rTpl"></div>
     <textarea id="rText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
     <p class="muted small">送るのは「送る」を押したときだけです。まず「下書きに入れる」でも構いません。</p>
@@ -197,6 +201,10 @@
     <label class="lbl">件名</label>
     <input id="cSubj" autocomplete="off">
     <label class="lbl">本文</label>
+    <div class="airow" id="cAiRow" hidden>
+      <input id="cAiNote" autocomplete="off" placeholder="何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）">
+      <button class="pill pill--go" id="cAiGo">AIに書いてもらう</button>
+    </div>
     <div class="tplbar" id="cTpl"></div>
     <textarea id="cText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
     <p class="muted small">
@@ -293,6 +301,31 @@
     </section>
 
     <section class="sec">
+      <h3>AI に書いてもらう</h3>
+      <p class="muted small">
+        文面を書くのは、Mac の <b>Hub Board</b> の中で動いている Claude です。
+        <b>ふだんのプランの中で動くので、別の請求は立ちません。</b><br>
+        下の欄に、Hub Board の設定にある <b>QR と同じ文字列</b>（<code>https://… /?t=…</code>）を貼ってください。
+        住所と合言葉に分けて、この端末の中だけに覚えます。
+      </p>
+      <div class="row">
+        <input id="aiUrl" autocomplete="off" placeholder="https://… /?t=…">
+        <button class="pill" id="aiSave">覚える</button>
+      </div>
+      <p class="muted small" id="aiState"></p>
+      <label class="lbl">自分のこと（AI が下書きに使います）</label>
+      <p class="muted small">
+        住所・署名・お店の名前など、毎回書くことを書いておくと、下書きに入るようになります。
+        ★<b>パスワードやカードの番号は書かないでください。</b>
+      </p>
+      <textarea id="aiProfile" rows="8" placeholder="例）&#10;署名は「株式会社T3Dining 酒井 皓大」&#10;会社の住所は 〇〇&#10;お店は「炭焼ハンバーグ バグる」"></textarea>
+      <div class="row row--wrap">
+        <button class="pill" id="aiProfLoad">読み込む</button>
+        <button class="pill pill--go" id="aiProfSave">保存する</button>
+      </div>
+    </section>
+
+    <section class="sec">
       <h3>返信のテンプレ</h3>
       <p class="muted small">{name} と書くと、相手の名前に置き換わります。</p>
       <div class="tpls" id="tplBox"></div>
@@ -313,11 +346,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=69cb15b125"></script>
-<script src="js/store.js?v=69cb15b125"></script>
-<script src="js/api.js?v=69cb15b125"></script>
-<script src="js/update.js?v=69cb15b125"></script>
-<script src="js/rules.js?v=69cb15b125"></script>
-<script src="js/app.js?v=69cb15b125"></script>
+<script src="js/config.js?v=b80af1ef3f"></script>
+<script src="js/store.js?v=b80af1ef3f"></script>
+<script src="js/api.js?v=b80af1ef3f"></script>
+<script src="js/update.js?v=b80af1ef3f"></script>
+<script src="js/rules.js?v=b80af1ef3f"></script>
+<script src="js/ai.js?v=b80af1ef3f"></script>
+<script src="js/app.js?v=b80af1ef3f"></script>
 </body>
 </html>
