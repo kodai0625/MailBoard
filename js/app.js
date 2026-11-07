@@ -2579,19 +2579,6 @@ function bindEvents() {
     S.tpl.push(['u' + Date.now(), '新しいテンプレ', '', S.tpl.length + 1]);
     renderTpl();
   });
-  // ★お店むけの見本を入れます。**名前が同じものは入れません**（二度押しても増えない）。
-  //   入れるだけで、保存は「保存する」を押したときです
-  on('#tplMise', 'click', () => {
-    const have = new Set(S.tpl.map((t) => String(t[1] || '').trim()));
-    let n = 0;
-    TPL_MISE.forEach(([name, body]) => {
-      if (have.has(name)) return;
-      S.tpl.push(['m' + Date.now() + (n++), name, body, S.tpl.length + 1]);
-    });
-    renderTpl();
-    toast(n ? n + 'つ入れました。電話番号と営業時間を直して「保存する」を押してください'
-            : 'もう入っています');
-  });
   on('#tplBox', 'click', (e) => {
     const b = e.target.closest('[data-tdel]'); if (!b) return;
     S.tpl.splice(Number(b.dataset.tdel), 1);
