@@ -124,6 +124,7 @@ const Api = {
   probe(src, pin) { return this.post(src, 'probe', {}, pin); },
   scan(src) { return this.post(src, 'scan', {}); },
   sync(src) { return this.post(src, 'sync', {}); },
+  peek(src) { return this.post(src, 'peek', {}); },
   pull(src, offset, limit) { return this.post(src, 'pull', { offset, limit }); },
   body(src, id) { return this.post(src, 'body', { id }); },
   read(src, ids, read) { return this.post(src, 'read', { ids, read }); },

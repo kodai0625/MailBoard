@@ -38,6 +38,10 @@ const S = {
   tpl: [],
   aliases: [],        // Gmail に登録ずみの送信者
   aliasSrc: {},       // その送信者は、どの受け口のものか
+  seenH: {},          // 受け口 → 前に見た「動いた印」（historyId）
+  watching: 0,        // 見張りの番号
+  watchAt: 0,         // 前に聞いた時刻
+  watchBusy: 0,       // いま聞いている最中か
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
   swiped: 0,          // 最後に横へなぞり終わった時刻
@@ -1412,6 +1416,66 @@ async function scanLoop(src) {
 }
 
 /** 新着を取り込む。ふだんはこちら */
+/* ============================================================
+ *  新着の見張り
+ *
+ *  ★いままでは「開いたとき」と「ほかのタブから戻ったとき」しか
+ *    見ていませんでした。開いたまま眺めていると、新着は出ません。
+ *
+ *  ★毎回まるごと聞きに行くと重いので、**まず軽く「変わった？」**
+ *    だけを聞きます（peek）。変わったときだけ、ちゃんと取りに行きます。
+ *
+ *  ★画面を見ていないあいだは何もしません。iPhone を伏せているのに
+ *    聞き続けると、電池も Google の持ち時間も無駄になります。
+ * ========================================================== */
+/* ★見る間隔。この窓を見ているときだけ短くします。
+ *   Google の受け口には**1日ぶんの持ち時間**（90分）しかありません。
+ *   ずっと短い間隔で聞き続けると、それだけで使い切ってしまいます。 */
+const WATCH_FOCUS_SEC = 30;   // この窓を見ている
+const WATCH_BACK_SEC = 180;   // 開いてはいるが、ほかの窓が前にある
+
+function startWatch() {
+  if (S.watching) clearInterval(S.watching);
+  // 5秒ごとに「そろそろ聞く時間か」だけを見ます。
+  // ★こうしておくと、窓を見はじめた瞬間から短い間隔に切り替わります
+  S.watching = setInterval(watchTick, 5000);
+  // 窓を前に出した（ほかのアプリから戻った）ときは、待たずに聞きます。
+  // ★同じタブのままなので visibilitychange は鳴りません
+  addEventListener('focus', () => { S.watchAt = 0; watchTick(); });
+}
+
+function watchTick() {
+  if (document.hidden || S.demo || S.scanning || S.busy || S.watchBusy) return;
+  const wait = (document.hasFocus() ? WATCH_FOCUS_SEC : WATCH_BACK_SEC) * 1000;
+  if (Date.now() - (S.watchAt || 0) < wait) return;
+  S.watchAt = Date.now();
+  watchOnce();
+}
+
+async function watchOnce() {
+  const live = Api.live();
+  if (!live.length) return;
+  S.watchBusy = 1;
+  try {
+    for (const src of live) {
+      let h = '';
+      try {
+        h = String((await Api.peek(src)).h || '');
+      } catch (e) {
+        return;                      // つながらないときは、黙って次の回に
+      }
+      if (!h) continue;              // 印が取れない受け口は、見張りの対象外
+      const before = S.seenH[src];
+      S.seenH[src] = h;
+      if (before === undefined) continue;   // 1回目は、ものさしを置くだけ
+      if (before !== h) { await syncNew(true); return; }
+    }
+  } finally {
+    S.watchBusy = 0;
+    S.watchAt = Date.now();          // 聞き終わった時刻から数え直します
+  }
+}
+
 async function syncNew(quiet) {
   const live = Api.live();
   if (!live.length) return;
@@ -1450,6 +1514,11 @@ async function syncNew(quiet) {
     await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
+    // 取り込んだあとに、見張りのものさしを合わせ直します
+    // （取り込み中に届いたぶんを、次の回で拾えるように）
+    for (const src of live) {
+      try { S.seenH[src] = String((await Api.peek(src)).h || S.seenH[src] || ''); } catch (e) { /* あとで */ }
+    }
     if (!quiet) toast(added ? added + '通が届いていました' : '新着はありません');
     render(); renderSources();
   } catch (e) {
@@ -1945,6 +2014,7 @@ async function boot() {
   bindEvents();
   bindEdgeBack();
   bindSwipe();
+  startWatch();
   Updater.start();
   loadAddrs();
 
