@@ -2589,7 +2589,7 @@ function bindEvents() {
       S.tpl.push(['m' + Date.now() + (n++), name, body, S.tpl.length + 1]);
     });
     renderTpl();
-    toast(n ? n + 'つ入れました。〈1回だけ〉のところを直して「保存する」を押してください'
+    toast(n ? n + 'つ入れました。電話番号と営業時間を直して「保存する」を押してください'
             : 'もう入っています');
   });
   on('#tplBox', 'click', (e) => {
