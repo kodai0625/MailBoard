@@ -410,6 +410,14 @@ input[type="number"] { width: 5.5em; }
 /* 数が合っていないときは、目立たせます */
 .src .is-warn { color: var(--danger); }
 
+/* ---- 返信ずみの印（2026-11-08） ----
+   ★フラグ（菫）と並ぶので、色は分けます。こちらは目を引かせません。
+     「もう返した」は**見終わった**ことの印で、急ぎの合図ではないためです */
+.mail__rep { color: var(--text-weak); display: flex; align-items: center; }
+.mail__rep .ico { width: 15px; height: 15px; }
+/* 未読のまま返信ずみ、はふつう起きないので、そのときは少し濃く出します */
+.mail.is-unread .mail__rep { color: var(--text-sub); }
+
 /* ---- フラグ（Gmail のスター） ---- */
 .mail__flag { color: var(--accent); display: flex; align-items: center; }
 .mail__flag .ico { width: 15px; height: 15px; }

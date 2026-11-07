@@ -43,6 +43,7 @@ const S = {
   watchAt: 0,         // 前に聞いた時刻
   watchBusy: 0,       // いま聞いている最中か
   recounting: 0,      // いま合計を数え直している最中か
+  replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
   swiped: 0,          // 最後に横へなぞり終わった時刻
@@ -405,13 +406,14 @@ function groupRows(rows) {
     const key = Rules.keyOf(r);
     const tk = threadKey(r);
     if (!tk) {                       // 番号が無いものは、まとめません
-      out.push({ r, n: 1, keys: [key], unread: !!r[F.UNREAD], flag: S.star.has(key) });
+      out.push({ r, n: 1, keys: [key], unread: !!r[F.UNREAD], flag: S.star.has(key),
+                 rep: false });        // やり取りの番号が無いと、返信ずみか分かりません
       continue;
     }
     let g = at.get(tk);
     if (!g) {
       // 並びは新しい順なので、はじめに出てきたものがいちばん新しい
-      g = { r, n: 0, keys: [], unread: false, flag: false };
+      g = { r, n: 0, keys: [], unread: false, flag: false, rep: S.replied.has(tk) };
       at.set(tk, g);
       out.push(g);
     }
@@ -538,7 +540,8 @@ function renderList() {
     ? groupRows(rows)
     : rows.map((r) => {
         const k = Rules.keyOf(r);
-        return { r, n: 1, keys: [k], unread: !!r[F.UNREAD], flag: S.star.has(k) };
+        return { r, n: 1, keys: [k], unread: !!r[F.UNREAD], flag: S.star.has(k),
+                 rep: S.replied.has(threadKey(r)) };
       });
   const show = items.slice(0, S.shown);
   const ul = $('#list');
@@ -600,6 +603,8 @@ function renderList() {
       +   '<div class="mail__top">'
       +     '<span class="mail__from">' + esc(r[F.NAME] || r[F.FROM]) + '</span>'
       +     (g.n > 1 ? '<span class="mail__n">' + g.n + '通</span>' : '')
+      +     (g.rep ? '<span class="mail__rep" title="このやり取りには返信しています">'
+                     + icon('reply') + '</span>' : '')
       +     (fl ? '<span class="mail__flag">' + icon('flag') + '</span>' : '')
       +     '<span class="mail__date">' + fmtDate(r[F.DATE]) + '</span>'
       +   '</div>'
@@ -1350,6 +1355,15 @@ async function sendReply(asDraft) {
     if (asDraft) await Api.draft(src, id, text, all, from);
     else await Api.reply(src, id, text, all, from);
     $('#reply').hidden = true;
+    // ★送ったら、その場で「返信ずみ」の印をつけます。
+    //   受け口に聞き直すのを待つと、送った直後の一覧に印が出ません
+    if (!asDraft) {
+      const tk = threadKey(row);
+      if (tk) {
+        S.replied.add(tk);
+        await Store.set('replied', Array.from(S.replied));
+      }
+    }
     // ★送った文を手本として覚えてもらいます（使うほど自分の言い回しに近づく）
     if (!asDraft) {
       AI.learn({ box: folderName(folderOf(row)) || '', subject: String(row[F.SUBJ] || ''), text });
@@ -1477,6 +1491,24 @@ async function watchOnce() {
   }
 }
 
+/**
+ * 返信ずみのやり取りを覚えます。
+ *
+ * ★**足すだけ**です。消しません。返信は取り消せないので、
+ *   一度ついた印が消えることはありません。足すだけにしておけば、
+ *   ふだんの `sync` は近い30日ぶんだけ聞いて済みます。
+ */
+async function addReplied(src, tids) {
+  if (!tids || !tids.length) return 0;
+  let n = 0;
+  for (const t of tids) {
+    const k = String(src) + ':' + String(t);
+    if (!S.replied.has(k)) { S.replied.add(k); n++; }
+  }
+  if (n) await Store.set('replied', Array.from(S.replied));
+  return n;
+}
+
 async function syncNew(quiet) {
   const live = Api.live();
   if (!live.length) return;
@@ -1493,6 +1525,7 @@ async function syncNew(quiet) {
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
       added += mergeRows(d.added || [], src);
+      await addReplied(src, d.replied);
       // 未読の一覧を受け取って、こちらの印を合わせます。
       // 既読かどうかは Gmail 側でも変わるので、毎回そろえます。
       // ★合わせるのは、その受け口から来た行だけです。全部に当てると、
@@ -1550,7 +1583,10 @@ async function recountSometimes() {
   if (!live.length) return;
   let at = 0;
   try { at = Number(await Store.get('recountAt')) || 0; } catch (e) { /* はじめては0 */ }
-  if (Date.now() - at < RECOUNT_HOURS * 3600 * 1000) return;
+  // ★「返信ずみ」をまだ1つも知らないときは、半日を待たずに1回だけ走ります。
+  //   ふだんの新着は近い30日ぶんしか見ていないので、待たせると
+  //   古いやり取りに印が出ないままになります
+  if (S.replied.size && Date.now() - at < RECOUNT_HOURS * 3600 * 1000) return;
   S.recounting = 1;
   try {
     // ★先に時刻を置きます。途中で転んでも、半日は繰り返しません
@@ -1558,6 +1594,7 @@ async function recountSometimes() {
     for (const src of live) {
       try {
         const d = await Api.recount(src);
+        await addReplied(src, d.replied);     // ★古いぶんまでそろえます
         if (d.counted) S.inbox[src] = Number(d.inbox || 0);
         S.indexed[src] = Number(d.indexed || S.indexed[src] || 0);
       } catch (e) { /* つながらないときは、次の回に */ }
@@ -2101,8 +2138,10 @@ async function boot() {
     const t = await Store.get('tpl');
     const h = await Store.get('hosts');
     const st = await Store.get('star');
+    const rp = await Store.get('replied');
     if (h) S.hosts = h;
     if (Array.isArray(st)) S.star = new Set(st);
+    if (Array.isArray(rp)) S.replied = new Set(rp);
     if (r) Rules.set(r);
     if (o) Rules.setOver(o);
     if (t) S.tpl = t;
