@@ -42,6 +42,7 @@ const S = {
   watching: 0,        // 見張りの番号
   watchAt: 0,         // 前に聞いた時刻
   watchBusy: 0,       // いま聞いている最中か
+  recounting: 0,      // いま合計を数え直している最中か
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
   swiped: 0,          // 最後に横へなぞり終わった時刻
@@ -1521,10 +1522,49 @@ async function syncNew(quiet) {
     }
     if (!quiet) toast(added ? added + '通が届いていました' : '新着はありません');
     render(); renderSources();
+    recountSometimes();          // ★たまに合計を数え直します（下の説明）
   } catch (e) {
     if (!quiet) toast(String(e.message || e), true);
   } finally {
     S.busy = ''; render();
+  }
+}
+
+/* ============================================================
+ *  合計をたまに数え直す
+ *
+ *  ★受け口の「読み込む範囲の合計」は、**点検したときにしか
+ *    数え直していませんでした。**だから、消した・片づけた
+ *    メールのぶん、合計は少しずつ実際とずれます。
+ *    ずれると「◯通 足りません／多いです」が出続けます。
+ *
+ *  ★「点検して直す」は索引（2万8千行）を読み書きするので重く、
+ *    勝手に動かすと操作の最中に固まります。
+ *    **数えるだけ**の軽いほう（recount）を、半日に1回だけ動かします。
+ * ========================================================== */
+const RECOUNT_HOURS = 12;
+
+async function recountSometimes() {
+  if (S.demo || S.scanning || S.recounting) return;
+  const live = Api.live();
+  if (!live.length) return;
+  let at = 0;
+  try { at = Number(await Store.get('recountAt')) || 0; } catch (e) { /* はじめては0 */ }
+  if (Date.now() - at < RECOUNT_HOURS * 3600 * 1000) return;
+  S.recounting = 1;
+  try {
+    // ★先に時刻を置きます。途中で転んでも、半日は繰り返しません
+    await Store.set('recountAt', Date.now());
+    for (const src of live) {
+      try {
+        const d = await Api.recount(src);
+        if (d.counted) S.inbox[src] = Number(d.inbox || 0);
+        S.indexed[src] = Number(d.indexed || S.indexed[src] || 0);
+      } catch (e) { /* つながらないときは、次の回に */ }
+    }
+    renderSources();
+  } finally {
+    S.recounting = 0;
   }
 }
 
@@ -1749,20 +1789,25 @@ function countLine(id, n) {
   const nm = (q === 'in:inbox') ? '受信トレイ' : '読み込む範囲';
   let note = '';
   let cls = '';
+  const head = '／ ' + nm + ' ' + inbox.toLocaleString() + '通　';
   if (!inbox) {
     note = S.done[id] ? '（古いぶんまで入っています）' : '（まだ途中です）';
   } else if (n < inbox) {
-    note = '／ ' + nm + ' ' + inbox.toLocaleString() + '通　'
-         + '<b>あと ' + (inbox - n).toLocaleString() + '通 足りません。'
+    // ★足りないのは困ります。探しているメールが出てこないので
+    note = head + '<b>あと ' + (inbox - n).toLocaleString() + '通 足りません。'
          + '「続きを読み込む」をもう一度</b>';
     cls = ' is-warn';
   } else if (n > inbox) {
-    note = '／ ' + nm + ' ' + inbox.toLocaleString() + '通　'
-         + '<b>' + (n - inbox).toLocaleString() + '通 多いです。'
-         + '「点検して直す」を押してください</b>';
-    cls = ' is-warn';
+    // ★多いのは困りません。**消した・片づけたメールが索引に残っている**だけで、
+    //   探すのに邪魔にはなりません。だから急かしません。
+    //   以前は少しのずれでも赤字で「押してください」と出していて、
+    //   ko-dai さんから「ほぼ毎回出る」と言われました（2026-11-08）。
+    const over = n - inbox;
+    note = head + '消した・片づけたメールが ' + over.toLocaleString() + '通 残っています'
+         + '（ひまなときに「点検して直す」で消えます）';
+    if (over > 100) cls = ' is-warn';
   } else {
-    note = '／ ' + nm + ' ' + inbox.toLocaleString() + '通　そろっています';
+    note = head + 'そろっています';
   }
   return '<p class="muted small' + cls + '">索引 <b>' + n.toLocaleString() + '通</b> ' + note + '</p>';
 }
