@@ -2058,9 +2058,13 @@ function renderAi() {
 }
 
 function renderTpl() {
+  // ★欄の高さは中身に合わせます。4行で固定していたので、長いテンプレだと
+  //   **下のほう（署名など）が隠れて**、直すのに中でスクロールが要りました
+  const rowsOf = (body) => Math.min(24, Math.max(4, String(body || '').split('\n').length + 1));
   $('#tplBox').innerHTML = S.tpl.map((t, i) =>
     '<div class="tplrow"><input class="tplname" data-i="' + i + '" value="' + esc(t[1]) + '">'
-    + '<textarea class="tplbody" data-i="' + i + '" rows="4">' + esc(t[2]) + '</textarea>'
+    + '<textarea class="tplbody" data-i="' + i + '" rows="' + rowsOf(t[2]) + '">'
+    + esc(t[2]) + '</textarea>'
     + '<button class="x" data-tdel="' + i + '" title="消す">×</button></div>').join('')
     || '<p class="muted">まだありません</p>';
 }
@@ -2574,6 +2578,19 @@ function bindEvents() {
   on('#tplAdd', 'click', () => {
     S.tpl.push(['u' + Date.now(), '新しいテンプレ', '', S.tpl.length + 1]);
     renderTpl();
+  });
+  // ★お店むけの見本を入れます。**名前が同じものは入れません**（二度押しても増えない）。
+  //   入れるだけで、保存は「保存する」を押したときです
+  on('#tplMise', 'click', () => {
+    const have = new Set(S.tpl.map((t) => String(t[1] || '').trim()));
+    let n = 0;
+    TPL_MISE.forEach(([name, body]) => {
+      if (have.has(name)) return;
+      S.tpl.push(['m' + Date.now() + (n++), name, body, S.tpl.length + 1]);
+    });
+    renderTpl();
+    toast(n ? n + 'つ入れました。〈1回だけ〉のところを直して「保存する」を押してください'
+            : 'もう入っています');
   });
   on('#tplBox', 'click', (e) => {
     const b = e.target.closest('[data-tdel]'); if (!b) return;

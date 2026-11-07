@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="fbda73de25">
+<meta name="app-version" content="3d67ccfc9b">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=fbda73de25">
-<link rel="stylesheet" href="css/design.css?v=fbda73de25">
+<link rel="stylesheet" href="css/style.css?v=3d67ccfc9b">
+<link rel="stylesheet" href="css/design.css?v=3d67ccfc9b">
 </head>
 <body>
 
@@ -332,8 +332,12 @@
       <div class="tpls" id="tplBox"></div>
       <div class="row">
         <button class="pill" id="tplAdd">足す</button>
+        <button class="pill" id="tplMise">お店むけの見本を入れる</button>
         <button class="pill pill--go" id="tplSave">保存する</button>
       </div>
+      <p class="muted small">「お店むけ」は、予約とテイクアウトの
+        <b>受ける文・断る文</b>が4つ入ります。入れたあと、
+        〈1回だけ〉のところ（電話番号など）を直して保存してください。</p>
     </section>
 
   </div>
@@ -347,12 +351,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=fbda73de25"></script>
-<script src="js/store.js?v=fbda73de25"></script>
-<script src="js/api.js?v=fbda73de25"></script>
-<script src="js/update.js?v=fbda73de25"></script>
-<script src="js/rules.js?v=fbda73de25"></script>
-<script src="js/ai.js?v=fbda73de25"></script>
-<script src="js/app.js?v=fbda73de25"></script>
+<script src="js/config.js?v=3d67ccfc9b"></script>
+<script src="js/store.js?v=3d67ccfc9b"></script>
+<script src="js/api.js?v=3d67ccfc9b"></script>
+<script src="js/update.js?v=3d67ccfc9b"></script>
+<script src="js/rules.js?v=3d67ccfc9b"></script>
+<script src="js/ai.js?v=3d67ccfc9b"></script>
+<script src="js/app.js?v=3d67ccfc9b"></script>
 </body>
 </html>
