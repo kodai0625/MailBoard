@@ -1435,7 +1435,7 @@ const WATCH_FOCUS_SEC = 30;   // この窓を見ている
 const WATCH_BACK_SEC = 180;   // 開いてはいるが、ほかの窓が前にある
 
 function startWatch() {
-  if (S.watching) clearInterval(S.watching);
+  if (S.watching) return;            // ★二重に仕掛けません
   // 5秒ごとに「そろそろ聞く時間か」だけを見ます。
   // ★こうしておくと、窓を見はじめた瞬間から短い間隔に切り替わります
   S.watching = setInterval(watchTick, 5000);
