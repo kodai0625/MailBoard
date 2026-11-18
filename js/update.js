@@ -86,9 +86,14 @@ const Updater = {
   },
 
   start() {
-    if (this._started || !this.current()) return;
+    if (this._started) return;
     this._started = true;
+    // ★世話係だけは、版の印が無くても入れます。
+    //   印が入るのは公開版だけなので、ここで止めると
+    //   **Mac（localhost）でプッシュ通知を使えません**（通知は世話係が受け取ります）。
+    //   控えの出し入れは ?v= が付いたものだけなので、手元で入れても困りません
     this.registerWorker();
+    if (!this.current()) return;
 
     const bar = document.getElementById('updateBar');
     if (bar) bar.querySelector('button').addEventListener('click', () => this.apply());

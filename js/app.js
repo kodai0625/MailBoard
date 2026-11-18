@@ -1638,6 +1638,150 @@ async function syncNew(quiet) {
 }
 
 /* ============================================================
+ *  プッシュ通知
+ *
+ *  ★見張りをするのは**受け口（Google のサーバー）**です。
+ *    Mac の Hub Board にやらせると、**Mac が寝ているあいだ誰も気づけません。**
+ *    ko-dai さんの条件は「常にスマホに通知が来ること」なので、
+ *    受け口に1分おきの見張りを置いています。
+ *
+ *  ★通知に**中身は入れていません。**届くのは合図だけで、件名と差出人は
+ *    サービスワーカーが受け口に聞きに行きます（`sw.js`）。
+ *    そのために、受け口の住所と合言葉を IndexedDB にも写します
+ *    （サービスワーカーからは localStorage が読めないため）。
+ * ========================================================== */
+
+function pushReady() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+/** base64url の鍵を、subscribe が受け取れる形に直します */
+function keyBytes(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+/**
+ * いまの登録を返します。
+ *
+ * ★`navigator.serviceWorker.ready` は、**世話係がまだ入っていないと
+ *   いつまでも返りません。**そこで止まると設定の画面が固まるので、
+ *   `getRegistration()` で「あるか」を先に見ます。
+ */
+async function pushReg() {
+  if (!pushReady()) return null;
+  try { return (await navigator.serviceWorker.getRegistration()) || null; }
+  catch (e) { return null; }
+}
+
+async function pushSub() {
+  const reg = await pushReg();
+  if (!reg || !reg.pushManager) return null;
+  try { return await reg.pushManager.getSubscription(); } catch (e) { return null; }
+}
+
+async function renderPush() {
+  const note = $('#pushNote');
+  const on = $('#pushOn');
+  const off = $('#pushOff');
+  if (!note || !on || !off) return;
+
+  if (!pushReady()) {
+    note.textContent = 'この端末（この browser）は通知に対応していません。';
+    on.hidden = true; off.hidden = true;
+    return;
+  }
+  // ★iPhone は「ホーム画面に追加」したものでないと通知を受け取れません。
+  //   Safari のタブのままだと、押しても必ず断られます
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (ios && !window.navigator.standalone) {
+    note.innerHTML = '<b>先にホーム画面に追加してください。</b>'
+      + 'iPhone は、ホーム画面から開いたときだけ通知を受け取れます'
+      + '（共有 → ホーム画面に追加）。';
+    on.hidden = true; off.hidden = true;
+    return;
+  }
+  const reg = await pushReg();
+  if (!reg) {
+    note.textContent = 'この画面ではまだ用意ができていません。'
+      + 'いちど開き直してから、もう一度ひらいてください。';
+    on.hidden = true; off.hidden = true;
+    return;
+  }
+  const sub = await pushSub();
+  const yes = !!sub && Notification.permission === 'granted';
+  on.hidden = yes; off.hidden = !yes;
+  note.textContent = yes ? 'この端末は受け取ります。'
+    : Notification.permission === 'denied'
+      ? '通知が断られています。端末の設定から Mail Board の通知を許可してください。'
+      : 'まだ受け取っていません。';
+}
+
+async function pushTurnOn() {
+  if (!pushReady()) { toast('この端末は通知に対応していません', true); return; }
+  const live = Api.live();
+  if (!live.length) { toast('先に受け口をつないでください', true); return; }
+  try {
+    S.busy = '通知の用意をしています…'; render();
+    // ★許可を聞くのは、押したその場でなければいけません（決まりです）
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('通知が許可されませんでした', true); return; }
+
+    const key = (await Api.pushKey(live[0])).key;
+    if (!key) throw new Error('受け口から通知の鍵が返りませんでした');
+    const reg = await pushReg();
+    if (!reg || !reg.pushManager) {
+      throw new Error('この画面では通知を使えません。いちど開き直してください');
+    }
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: keyBytes(key),
+      });
+    }
+    const ep = sub.endpoint;
+    // ★受け口ぜんぶに登録します。どちらに来たメールでも知らせるためです
+    const ng = [];
+    for (const src of live) {
+      try { await Api.pushAdd(src, ep, navigator.userAgent); }
+      catch (e) { ng.push(srcName(src)); }
+    }
+    // ★サービスワーカーが受け口に聞けるように、住所と合言葉を写します
+    await Store.set('pushSrc', live.map((src) => ({
+      url: Api.url(src), pin: Api.pin(src), name: srcName(src),
+    })));
+    toast(ng.length ? ng.join('・') + ' には登録できませんでした' : '通知を受け取ります', !!ng.length);
+  } catch (e) {
+    toast(String(e.message || e), true);
+  } finally {
+    S.busy = ''; render(); renderPush();
+  }
+}
+
+async function pushTurnOff() {
+  try {
+    S.busy = '通知をやめています…'; render();
+    const sub = await pushSub();
+    if (sub) {
+      for (const src of Api.live()) {
+        try { await Api.pushDel(src, sub.endpoint); } catch (e) { /* 消せなくても進みます */ }
+      }
+      await sub.unsubscribe();
+    }
+    await Store.set('pushSrc', []);
+    toast('通知をやめました');
+  } catch (e) {
+    toast(String(e.message || e), true);
+  } finally {
+    S.busy = ''; render(); renderPush();
+  }
+}
+
+/* ============================================================
  *  合計をたまに数え直す
  *
  *  ★受け口の「読み込む範囲の合計」は、**点検したときにしか
@@ -1836,6 +1980,7 @@ function openSettings() {
   $('#settings').hidden = false;
   document.body.classList.add('is-modal');
   renderSources();
+  renderPush();
   // ★呼び名で棚が変わります。ここを黙っていると、iPhone で
   //   「会社」を別の呼び名で入れたときに、会社の棚（発注・UPSIDER…）が
   //   出ずに、原因も分からない、ということが起きます
@@ -2182,6 +2327,12 @@ async function boot() {
   bindEdgeBack();
   bindSwipe();
   startWatch();
+  // ★通知を押して戻ってきたときは、待たずに取り込みます（sw.js から合図が来ます）
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'push-open') syncNew(true);
+    });
+  }
   Updater.start();
   loadAddrs();
 
@@ -2678,6 +2829,9 @@ function bindEvents() {
     S.tpl.push(['u' + Date.now(), '新しいテンプレ', '', S.tpl.length + 1]);
     renderTpl();
   });
+  on('#pushOn', 'click', pushTurnOn);
+  on('#pushOff', 'click', pushTurnOff);
+
   // ★上の帯の「更新」。いちばん押すものなので、設定をひらかずに押せます
   on('#syncBtn', 'click', async () => {
     if (S.demo) { toast('見本なので取り込めません'); return; }

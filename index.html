@@ -17,7 +17,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="6f3e71bc38">
+<meta name="app-version" content="24da39c63d">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +36,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=6f3e71bc38">
-<link rel="stylesheet" href="css/design.css?v=6f3e71bc38">
+<link rel="stylesheet" href="css/style.css?v=24da39c63d">
+<link rel="stylesheet" href="css/design.css?v=24da39c63d">
 </head>
 <body>
 
@@ -334,6 +334,21 @@
     </section>
 
     <section class="sec">
+      <h3>プッシュ通知</h3>
+      <p class="muted small">新しいメールが来たとき、この端末に知らせます。
+        見張りは<b>受け口（Google のサーバー）</b>がやるので、
+        <b>Mac が寝ていても届きます</b>。</p>
+      <p class="muted small" id="pushNote"></p>
+      <div class="row">
+        <button class="pill pill--go" id="pushOn">通知を受け取る</button>
+        <button class="pill" id="pushOff" hidden>やめる</button>
+      </div>
+      <p class="muted small">★通知に<b>メールの中身は入っていません</b>。
+        「変わったよ」の合図だけが届き、件名と差出人は端末が受け口に聞きに行きます。
+        Apple や Google の通知の道を、中身が通りません。</p>
+    </section>
+
+    <section class="sec">
       <h3>返信のテンプレ</h3>
       <p class="muted small">{name} と書くと、相手の名前に置き換わります。</p>
       <div class="tpls" id="tplBox"></div>
@@ -354,12 +369,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=6f3e71bc38"></script>
-<script src="js/store.js?v=6f3e71bc38"></script>
-<script src="js/api.js?v=6f3e71bc38"></script>
-<script src="js/update.js?v=6f3e71bc38"></script>
-<script src="js/rules.js?v=6f3e71bc38"></script>
-<script src="js/ai.js?v=6f3e71bc38"></script>
-<script src="js/app.js?v=6f3e71bc38"></script>
+<script src="js/config.js?v=24da39c63d"></script>
+<script src="js/store.js?v=24da39c63d"></script>
+<script src="js/api.js?v=24da39c63d"></script>
+<script src="js/update.js?v=24da39c63d"></script>
+<script src="js/rules.js?v=24da39c63d"></script>
+<script src="js/ai.js?v=24da39c63d"></script>
+<script src="js/app.js?v=24da39c63d"></script>
 </body>
 </html>

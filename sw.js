@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 6f3e71bc38 を版の印に
+ *  ★このファイルは 公開用を作る.py が 24da39c63d を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '6f3e71bc38';
+const VERSION = '24da39c63d';
 const CACHE = 'mailboard-' + VERSION;
 
 /* 新しいこのファイルが届いたら、前のものを待たずにすぐ交代します */
@@ -79,4 +79,94 @@ self.addEventListener('fetch', (e) => {
   if (url.searchParams.has('v')) { e.respondWith(cacheFirst(req)); return; }
 
   e.respondWith(networkFirst(req));
+});
+
+/* ============================================================
+ *  プッシュ通知
+ *
+ *  ★**通知には中身が入っていません。**受け口から届くのは
+ *    「変わったよ」の合図だけです。件名や差出人は、ここから
+ *    ふだんの道（受け口）に聞きに行きます。
+ *    こうすると、**メールの中身が Apple や Google の通知の道を
+ *    通りません。**
+ *
+ *  ★合言葉は localStorage にありますが、ここ（サービスワーカー）からは
+ *    読めません。だからアプリ側が IndexedDB にも写しています。
+ * ========================================================== */
+
+const DB_NAME = 'mail-board-v1';   // ★js/config.js の APP.storageKey と同じにすること
+
+/** IndexedDB の kv から1つ読みます */
+function kvGet(key) {
+  return new Promise((ok) => {
+    let req;
+    try { req = indexedDB.open(DB_NAME); } catch (e) { ok(null); return; }
+    req.onerror = () => ok(null);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('kv')) { ok(null); return; }
+      try {
+        const g = db.transaction('kv', 'readonly').objectStore('kv').get(key);
+        g.onsuccess = () => ok(g.result || null);
+        g.onerror = () => ok(null);
+      } catch (e) { ok(null); }
+    };
+  });
+}
+
+/** 受け口に「いまの一言」を聞きます。だめなら null */
+async function askBrief(src) {
+  try {
+    const res = await fetch(src.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ pin: src.pin, action: 'brief' }),
+    });
+    if (!res.ok) return null;
+    const d = await res.json();
+    return d && d.ok ? d : null;
+  } catch (e) { return null; }
+}
+
+self.addEventListener('push', (e) => {
+  e.waitUntil((async () => {
+    let title = '新しいメール';
+    let body = '新着があります';
+    const srcs = (await kvGet('pushSrc')) || [];
+    const got = await Promise.all(srcs.map((s) =>
+      askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
+    const live = got.filter((x) => x && x.d.n);
+    if (live.length) {
+      const total = live.reduce((a, x) => a + Number(x.d.n || 0), 0);
+      const head = live[0];
+      // ★「どこに」「誰から」「何の件名か」まで出します。
+      //   「新着があります」だけだと、開くまで分かりません
+      title = head.d.from ? head.d.from + '（' + head.name + '）' : head.name;
+      body = (head.d.subj || '（件名なし）')
+           + (total > 1 ? '\nほか ' + (total - 1) + '通' + (head.d.more ? '以上' : '') : '');
+    }
+    await self.registration.showNotification(title, {
+      body,
+      tag: 'mailboard-new',          // ★まとめて1つにします（鳴りっぱなしを防ぐ）
+      renotify: true,
+      icon: 'img/app-icon-192.png',
+      badge: 'img/app-icon-192.png',
+      data: { at: Date.now() },
+    });
+  })());
+});
+
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of all) {
+      if (c.url.indexOf(self.registration.scope) === 0) {
+        // ★開いているものがあれば、そこへ戻して取り込ませます
+        c.postMessage({ type: 'push-open' });
+        return c.focus();
+      }
+    }
+    return self.clients.openWindow(self.registration.scope);
+  })());
 });
