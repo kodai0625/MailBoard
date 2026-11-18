@@ -44,6 +44,7 @@ const S = {
   watchBusy: 0,       // いま聞いている最中か
   recounting: 0,      // いま合計を数え直している最中か
   syncing: 0,         // 上の帯の「更新」を押している最中か
+  pingMs: 0,          // 受け口に1回聞くのにかかった時間（ミリ秒）
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
@@ -1461,14 +1462,26 @@ async function scanLoop(src) {
 /* ★見る間隔。この窓を見ているときだけ短くします。
  *   Google の受け口には**1日ぶんの持ち時間**（90分）しかありません。
  *   ずっと短い間隔で聞き続けると、それだけで使い切ってしまいます。 */
-const WATCH_FOCUS_SEC = 30;   // この窓を見ている
+/* ★2026-11-18、30秒 → 10秒にしました。
+ *
+ *   はじめ「Apps Script は1日90分しか動けないから30秒より短くできない」と
+ *   書きましたが、**その90分は『トリガー（時間で動く仕掛け）の合計』**で、
+ *   こちらの聞きかた（ウェブアプリへの POST）とは別の枠でした。
+ *   かりに同じ枠だとしても、10秒 × 8時間 ＝ 2,880回 × 約0.5秒 ＝ 約24分で、
+ *   90分には届きません。
+ *
+ *   ★それでも1秒や2秒にはしません。1回の問い合わせ自体に1〜2秒かかるので、
+ *     短くしても前の問い合わせが終わらないうちに次が来るだけです。
+ *     **実際にかかっている時間は ⚙ の受け口らんに出しています。**
+ */
+const WATCH_FOCUS_SEC = 10;   // この窓を見ている
 const WATCH_BACK_SEC = 180;   // 開いてはいるが、ほかの窓が前にある
 
 function startWatch() {
   if (S.watching) return;            // ★二重に仕掛けません
-  // 5秒ごとに「そろそろ聞く時間か」だけを見ます。
+  // 2秒ごとに「そろそろ聞く時間か」だけを見ます。
   // ★こうしておくと、窓を見はじめた瞬間から短い間隔に切り替わります
-  S.watching = setInterval(watchTick, 5000);
+  S.watching = setInterval(watchTick, 2000);
   // 窓を前に出した（ほかのアプリから戻った）ときは、待たずに聞きます。
   // ★同じタブのままなので visibilitychange は鳴りません
   addEventListener('focus', () => { S.watchAt = 0; watchTick(); });
@@ -1487,19 +1500,24 @@ async function watchOnce() {
   if (!live.length) return;
   S.watchBusy = 1;
   try {
-    for (const src of live) {
-      let h = '';
-      try {
-        h = String((await Api.peek(src)).h || '');
-      } catch (e) {
-        return;                      // つながらないときは、黙って次の回に
-      }
+    // ★受け口は**まとめて同時に**聞きます。1つずつ待つと、受け口の数だけ
+    //   1〜2秒が足し算になり、10秒おきにした意味が薄れます
+    const t0 = Date.now();
+    const got = await Promise.all(live.map((src) =>
+      Api.peek(src).then((r) => ({ src, h: String(r.h || '') }))
+        .catch(() => ({ src, h: '' }))));
+    // ★かかった時間を覚えておきます。⚙ に出して、間あいを決める手がかりにします
+    S.pingMs = Date.now() - t0;
+
+    let moved = false;
+    for (const { src, h } of got) {
       if (!h) continue;              // 印が取れない受け口は、見張りの対象外
       const before = S.seenH[src];
       S.seenH[src] = h;
       if (before === undefined) continue;   // 1回目は、ものさしを置くだけ
-      if (before !== h) { await syncNew(true); return; }
+      if (before !== h) moved = true;
     }
+    if (moved) await syncNew(true);
   } finally {
     S.watchBusy = 0;
     S.watchAt = Date.now();          // 聞き終わった時刻から数え直します
@@ -1936,6 +1954,12 @@ function renderSources() {
       +     (on ? 'つながっています'
              : dead ? '返事がありません'
              : has ? '合言葉がまだ' : 'URL がまだ') + '</span>'
+      // ★1回聞くのに何秒かかっているかを出します。
+      //   「もっと短い間あいにできないか」は、ここの数字を見ないと決められません。
+      //   受け口は全部まとめて同時に聞いているので、数字は共通です
+      +   (on && S.pingMs
+            ? '<span class="src__ping">応答 ' + (S.pingMs / 1000).toFixed(1) + '秒</span>'
+            : '')
       +   verMark(id) + '</div>'
       + (dead ? '<p class="muted small is-warn">' + esc(S.err[id] || '')
           + '<br>Apps Script で「デプロイを管理 → 鉛筆 → 新バージョン → デプロイ」'

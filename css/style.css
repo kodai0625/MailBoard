@@ -196,6 +196,12 @@ body.is-modal { overflow: hidden; }
 }
 .note { font-size: 12.5px; color: var(--text-sub); margin: 12px 2px 0; }
 
+/* 受け口に1回聞くのにかかった時間（間あいを決める手がかり） */
+.src__ping {
+  font-size: 11.5px; color: var(--text-weak);
+  font-variant-numeric: tabular-nums; margin-left: 2px;
+}
+
 /* 知らせの中にボタンを置くとき（続きを読み込む） */
 .note--act {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
