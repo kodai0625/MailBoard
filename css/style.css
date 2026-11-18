@@ -196,6 +196,20 @@ body.is-modal { overflow: hidden; }
 }
 .note { font-size: 12.5px; color: var(--text-sub); margin: 12px 2px 0; }
 
+/* 知らせの中にボタンを置くとき（続きを読み込む） */
+.note--act {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 10px 12px 0;
+}
+.note--act[hidden] { display: none; }
+
+/* 更新が動いているあいだ、上の帯の矢印を回します */
+#syncBtn.is-spin .ico { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  #syncBtn.is-spin .ico { animation: none; opacity: .5; }
+}
+
 /* ---- 一括の帯 ---- */
 .bulk {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;

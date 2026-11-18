@@ -121,7 +121,10 @@ const Api = {
     return data;
   },
 
-  probe(src, pin) { return this.post(src, 'probe', {}, pin); },
+  // full を立てると、決まりごと・上書き・テンプレも一緒に返ってきます
+  // （別々に聞くと往復が3回増えるため。古い受け口は返さないので、
+  //   アプリ側で今までどおり別に聞き直します）
+  probe(src, pin, full) { return this.post(src, 'probe', full ? { full: true } : {}, pin); },
   scan(src) { return this.post(src, 'scan', {}); },
   sync(src) { return this.post(src, 'sync', {}); },
   peek(src) { return this.post(src, 'peek', {}); },

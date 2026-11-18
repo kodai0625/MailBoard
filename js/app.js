@@ -43,6 +43,7 @@ const S = {
   watchAt: 0,         // 前に聞いた時刻
   watchBusy: 0,       // いま聞いている最中か
   recounting: 0,      // いま合計を数え直している最中か
+  syncing: 0,         // 上の帯の「更新」を押している最中か
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
@@ -467,6 +468,7 @@ function render() {
   renderList();
   renderBulk();
   renderReadAll();
+  renderScanNote();
   $('#app').dataset.busy = S.busy ? '1' : '';
   $('#busy').textContent = S.busy;
 }
@@ -1395,6 +1397,19 @@ async function pullAll(src, onProgress) {
   return rows;
 }
 
+/**
+ * 「古いメールがまだそろっていません」の知らせを出すか決めます。
+ *
+ * ★前は起動のときに1回しか決めていなかったので、読み込み終わっても
+ *   出たままでした。索引の数が動いたら、そのつど見直します。
+ */
+function renderScanNote() {
+  const n = $('#scanNote');
+  if (!n) return;
+  const live = Api.live();
+  n.hidden = S.demo || !live.length || S.scanning || live.every((src) => S.done[src]);
+}
+
 /** 続きを読み込む。1回では終わらないので、終わるまで繰り返します */
 async function scanLoop(src) {
   if (S.scanning) return;
@@ -1520,12 +1535,25 @@ async function syncNew(quiet) {
   let added = 0;
   try {
     if (!quiet) { S.busy = '新着を見ています…'; render(); }
-    for (const src of live) {
-      const d = await Api.sync(src);
+    // ★受け口は**まとめて同時に**聞きます。1つずつ待つと、受け口の数だけ
+    //   1〜3秒が足し算になります（受け口は別々の Google アカウントなので、
+    //   同時に頼んでもぶつかりません）
+    const got = await Promise.all(live.map((src) =>
+      Api.sync(src).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+
+    // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
+    //   S.rows は1本しかないので、同時に書き換えると取りこぼします
+    let bad = null;
+    for (const { src, d, e } of got) {
+      if (e || !d) { bad = bad || e; continue; }
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
       added += mergeRows(d.added || [], src);
       await addReplied(src, d.replied);
+      // ★見張りのものさしは、取り込みの返事に入っています。
+      //   前はこのあと peek をもう1回ずつ聞いていました（往復の無駄）。
+      //   古い受け口は返さないので、そのときだけ今までどおり聞きます
+      if (d.h) S.seenH[src] = String(d.h);
       // 未読の一覧を受け取って、こちらの印を合わせます。
       // 既読かどうかは Gmail 側でも変わるので、毎回そろえます。
       // ★合わせるのは、その受け口から来た行だけです。全部に当てると、
@@ -1545,13 +1573,18 @@ async function syncNew(quiet) {
         await Store.set('star', Array.from(S.star));
       }
     }
+    // ★ぜんぶ転んだときだけ知らせます。片方だけなら、もう片方は入っています
+    if (bad && got.every((x) => x.e)) throw bad;
+
     await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
-    // 取り込んだあとに、見張りのものさしを合わせ直します
-    // （取り込み中に届いたぶんを、次の回で拾えるように）
-    for (const src of live) {
-      try { S.seenH[src] = String((await Api.peek(src)).h || S.seenH[src] || ''); } catch (e) { /* あとで */ }
+    // 古い受け口のぶんだけ、ものさしを聞き直します
+    const older = got.filter((x) => x.d && !x.d.h).map((x) => x.src);
+    if (older.length) {
+      await Promise.all(older.map((src) =>
+        Api.peek(src).then((r) => { S.seenH[src] = String(r.h || S.seenH[src] || ''); })
+          .catch(() => {})));
     }
     if (!quiet) toast(added ? added + '通が届いていました' : '新着はありません');
     render(); renderSources();
@@ -1856,6 +1889,7 @@ function countLine(id, n) {
  *   すると「どちらの話か」が分からなくなります。箱に分けて出します。
  */
 function renderSources() {
+  renderScanNote();
   const box = $('#srcBox');
   if (!box) return;
   box.innerHTML = SOURCES.map((src) => {
@@ -2153,37 +2187,51 @@ async function boot() {
     render();
   } catch (e) { /* はじめてなら空です */ }
 
-  // そのあとで、受け口ごとに聞きに行きます
+  /* そのあとで、受け口に聞きに行きます。
+   *
+   * ★**まとめて同時に聞きます。**前は1つずつ順番に待っていたので、
+   *   起動のたびに受け口との往復が**9回も直列**に並んでいました
+   *   （probe×2 → 決まりごと → 上書き → テンプレ → sync×2 → peek×2）。
+   *   1往復が1〜3秒かかるので、「つないでいます…」が15秒以上出たままでした
+   *   （2026-11-18、ko-dai さんの「出ている時間が長い」）。
+   *   いまは 3回 まで減っています。
+   */
   try {
     S.busy = 'つないでいます…'; render();
     const aliases = [];
-    for (const src of live) {
-      // ★1つの受け口がつまずいても、もう片方は動かします。
-      //   まとめて try で囲っていたので、個人が転ぶと会社も
-      //   聞きに行けませんでした。
-      try {
-        const p = await Api.probe(src);
-        // ★集めた先は思い込みで決めず、受け口に聞きます。
-        //   ここを取り違えると転送ぶんの振り分けが狂います
-        if (p.me) S.hosts[src] = String(p.me).toLowerCase();
-        S.indexed[src] = Number(p.indexed || 0);
-        S.inbox[src] = Number(p.inbox || 0);
-        S.query[src] = String(p.query || 'in:inbox');
-        S.ver[src] = String(p.version || '');
-        S.done[src] = !!p.backfillDone;
-        S.ok[src] = true;
-        S.err[src] = '';
-        (p.aliases || []).forEach((a) => {
-          if (!a) return;
-          if (aliases.indexOf(a) < 0) aliases.push(a);
-          // ★どの受け口のものかを覚えます。会社のアドレスから送るのに
-          //   個人の受け口へ頼んでも、向こうは知らない差出人として断ります
-          if (!S.aliasSrc[a]) S.aliasSrc[a] = src;
-        });
-      } catch (e) {
+    // ★いちばんの受け口だけ full で聞きます。決まりごと・上書き・テンプレが
+    //   一緒に返ってくるので、そのぶんの3往復が消えます
+    const probes = await Promise.all(live.map((src) =>
+      Api.probe(src, undefined, src === S.main)
+        .then((p) => ({ src, p }))
+        // ★1つの受け口がつまずいても、もう片方は動かします
+        .catch((e) => ({ src, e }))));
+
+    let main = null;
+    for (const { src, p, e } of probes) {
+      if (e || !p) {
         S.ok[src] = false;
-        S.err[src] = String((e && e.message) || e);
+        S.err[src] = String((e && e.message) || e || '返事がありません');
+        continue;
       }
+      if (src === S.main) main = p;
+      // ★集めた先は思い込みで決めず、受け口に聞きます。
+      //   ここを取り違えると転送ぶんの振り分けが狂います
+      if (p.me) S.hosts[src] = String(p.me).toLowerCase();
+      S.indexed[src] = Number(p.indexed || 0);
+      S.inbox[src] = Number(p.inbox || 0);
+      S.query[src] = String(p.query || 'in:inbox');
+      S.ver[src] = String(p.version || '');
+      S.done[src] = !!p.backfillDone;
+      S.ok[src] = true;
+      S.err[src] = '';
+      (p.aliases || []).forEach((a) => {
+        if (!a) return;
+        if (aliases.indexOf(a) < 0) aliases.push(a);
+        // ★どの受け口のものかを覚えます。会社のアドレスから送るのに
+        //   個人の受け口へ頼んでも、向こうは知らない差出人として断ります
+        if (!S.aliasSrc[a]) S.aliasSrc[a] = src;
+      });
     }
     if (live.every((src) => !S.ok[src])) {
       throw new Error(S.err[live[0]] || 'どの受け口からも返事がありません');
@@ -2191,13 +2239,17 @@ async function boot() {
     S.aliases = aliases;
     await Store.set('hosts', S.hosts);
 
-    const rr = await Api.rules(S.main);
-    const oo = await Api.over(S.main);
-    const tt = await Api.tpl(S.main);
-    Rules.set(rr.rows); Rules.setOver(oo.rows); S.tpl = tt.rows;
-    await Store.set('rules', rr.rows);
-    await Store.set('over', oo.rows);
-    await Store.set('tpl', tt.rows);
+    // ★古い受け口は full を知らないので、そのときだけ今までどおり別に聞きます
+    let rr = main && main.rules, oo = main && main.over, tt = main && main.tpl;
+    if (!rr || !oo || !tt) {
+      const [a, b, c] = await Promise.all([
+        Api.rules(S.main), Api.over(S.main), Api.tpl(S.main)]);
+      rr = a.rows; oo = b.rows; tt = c.rows;
+    }
+    Rules.set(rr); Rules.setOver(oo); S.tpl = tt;
+    await Store.set('rules', rr);
+    await Store.set('over', oo);
+    await Store.set('tpl', tt);
     recategorize();
     render();
 
@@ -2217,7 +2269,7 @@ async function boot() {
     }
 
     await syncNew(true);
-    $('#scanNote').hidden = live.every((src) => S.done[src]);
+    renderScanNote();
   } catch (e) {
     toast(String(e.message || e), true);
   } finally {
@@ -2578,6 +2630,23 @@ function bindEvents() {
   on('#tplAdd', 'click', () => {
     S.tpl.push(['u' + Date.now(), '新しいテンプレ', '', S.tpl.length + 1]);
     renderTpl();
+  });
+  // ★上の帯の「更新」。いちばん押すものなので、設定をひらかずに押せます
+  on('#syncBtn', 'click', async () => {
+    if (S.demo) { toast('見本なので取り込めません'); return; }
+    if (!Api.live().length) { toast('先に受け口をつないでください', true); return; }
+    if (S.scanning) { toast('いま古いメールを読み込んでいます'); return; }
+    if (S.syncing) return;                 // 二度押し防止
+    S.syncing = 1;
+    $('#syncBtn').classList.add('is-spin');
+    try { await syncNew(false); }
+    finally { S.syncing = 0; $('#syncBtn').classList.remove('is-spin'); }
+  });
+  // ★「続きを読み込む」。索引がそろっていないときだけ、一覧の上に出ます
+  on('#scanBtn', 'click', () => {
+    const left = Api.live().filter((src) => !S.done[src]);
+    if (!left.length) { toast('もうそろっています'); return; }
+    scanLoop(left[0]);
   });
   on('#tplBox', 'click', (e) => {
     const b = e.target.closest('[data-tdel]'); if (!b) return;
