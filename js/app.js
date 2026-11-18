@@ -1543,9 +1543,20 @@ async function syncNew(quiet) {
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
-    let bad = null;
+    const failed = [];
     for (const { src, d, e } of got) {
-      if (e || !d) { bad = bad || e; continue; }
+      if (e || !d) {
+        // ★転んだ受け口は、名前を控えて必ず知らせます。
+        //   まとめて同時に聞くようにしたとき（2026-11-18）、
+        //   **片方が転んでも黙って「新着はありません」と出す**ようになって
+        //   いました。届いていないのか、聞けていないのかが分かりません
+        S.ok[src] = false;
+        S.err[src] = String((e && e.message) || e || '返事がありません');
+        failed.push(srcName(src) + '：' + S.err[src]);
+        continue;
+      }
+      S.ok[src] = true;
+      S.err[src] = '';
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
       added += mergeRows(d.added || [], src);
@@ -1573,8 +1584,6 @@ async function syncNew(quiet) {
         await Store.set('star', Array.from(S.star));
       }
     }
-    // ★ぜんぶ転んだときだけ知らせます。片方だけなら、もう片方は入っています
-    if (bad && got.every((x) => x.e)) throw bad;
 
     await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
@@ -1586,7 +1595,21 @@ async function syncNew(quiet) {
         Api.peek(src).then((r) => { S.seenH[src] = String(r.h || S.seenH[src] || ''); })
           .catch(() => {})));
     }
-    if (!quiet) toast(added ? added + '通が届いていました' : '新着はありません');
+    // ★転んだ受け口があれば、取り込めたぶんの話より先に知らせます
+    if (failed.length) {
+      toast(failed.join('\n'), true);
+    } else if (!quiet) {
+      // ★「新着はありません」だけだと、**届いていないのか、聞けていないのか、
+      //   もう入っているのか**が分かりません。数を並べて出します。
+      //   範囲のほうが多ければ、索引に入りきっていないということです
+      const line = live.map((src) => {
+        const n = Number(S.indexed[src] || 0);
+        const t = Number(S.inbox[src] || 0);
+        return srcName(src) + ' ' + n.toLocaleString() + '通'
+             + (t && t > n ? '（範囲は ' + t.toLocaleString() + '通）' : '');
+      }).join('／');
+      toast(added ? added + '通が届いていました' : '新着はありません\n' + line);
+    }
     render(); renderSources();
     recountSometimes();          // ★たまに合計を数え直します（下の説明）
   } catch (e) {
