@@ -1593,6 +1593,7 @@ async function syncNew(quiet) {
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
     const failed = [];
+    let dirty = false;                 // 索引を書き直す必要があるか
     for (const { src, d, e } of got) {
       if (e || !d) {
         // ★転んだ受け口は、名前を控えて必ず知らせます。
@@ -1608,7 +1609,9 @@ async function syncNew(quiet) {
       S.err[src] = '';
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
-      added += mergeRows(d.added || [], src);
+      const n1 = mergeRows(d.added || [], src);
+      added += n1;
+      if (n1) dirty = true;
       await addReplied(src, d.replied);
       // ★見張りのものさしは、取り込みの返事に入っています。
       //   前はこのあと peek をもう1回ずつ聞いていました（往復の無駄）。
@@ -1621,16 +1624,21 @@ async function syncNew(quiet) {
       const un = new Set((d.unread || []).map(String));
       for (let i = 0; i < S.rows.length; i++) {
         if (String(S.rows[i][F.SRC]) !== src) continue;
-        S.rows[i][F.UNREAD] = un.has(String(S.rows[i][F.ID])) ? 1 : 0;
+        const now = un.has(String(S.rows[i][F.ID])) ? 1 : 0;
+        // ★変わったときだけ印を付けます。下の「書き直すかどうか」に使います
+        if (S.rows[i][F.UNREAD] !== now) { S.rows[i][F.UNREAD] = now; dirty = true; }
       }
       // フラグも同じようにそろえます。Gmail や「メール」アプリで
       // 付け外ししたものが、こちらにも出るようにするためです
       if (d.starred) {
+        // ★中身が変わったときだけ書きます（毎回書くと、そのぶん遅くなります）
+        const was = Array.from(S.star).filter((k) => k.indexOf(src + ':') === 0).sort().join(',');
         Array.from(S.star).forEach((k) => {
           if (k.indexOf(src + ':') === 0) S.star.delete(k);
         });
         d.starred.forEach((id) => S.star.add(src + ':' + String(id)));
-        await Store.set('star', Array.from(S.star));
+        const now = d.starred.map((id) => src + ':' + String(id)).sort().join(',');
+        if (was !== now) await Store.set('star', Array.from(S.star));
       }
     }
 
@@ -1662,6 +1670,7 @@ async function syncNew(quiet) {
           const r2 = await Api.pull(src, have, take);
           const n2 = mergeRows(r2.rows || [], src);
           added += n2;
+          if (n2) dirty = true;
           if (!n2) break;                              // 進まないなら、やめます
         } catch (e) {
           break;                                       // 取り戻せなくても、次の回に
@@ -1670,7 +1679,13 @@ async function syncNew(quiet) {
     }
     S.busy = '';
 
-    await Store.saveAll(S.rows);
+    // ★変わったときだけ書き直します。
+    //
+    //   ここは索引を**まるごと**書き直します（5万3千行なら、2千行ずつ27回）。
+    //   前は取り込みのたびに毎回やっていたので、**新着が無くても数秒かかって
+    //   いました**（2026-11-19、ko-dai さんの「読み込みに非常に長い時間がかかる」）。
+    //   ふだんは何も変わらないので、ほとんどの回はここを通りません。
+    if (dirty) await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
     // 古い受け口のぶんだけ、ものさしを聞き直します

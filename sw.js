@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 135eafab1d を版の印に
+ *  ★このファイルは 公開用を作る.py が 3c3901fe0f を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '135eafab1d';
+const VERSION = '3c3901fe0f';
 const CACHE = 'mailboard-' + VERSION;
 
 /* 新しいこのファイルが届いたら、前のものを待たずにすぐ交代します */
@@ -128,31 +128,77 @@ async function askBrief(src) {
   } catch (e) { return null; }
 }
 
+/** IndexedDB の kv に1つ書きます（もう知らせた通を覚えるため） */
+function kvSet(key, val) {
+  return new Promise((ok) => {
+    let req;
+    try { req = indexedDB.open(DB_NAME); } catch (e) { ok(false); return; }
+    req.onerror = () => ok(false);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('kv')) { ok(false); return; }
+      try {
+        const tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(val, key);
+        tx.oncomplete = () => ok(true);
+        tx.onerror = () => ok(false);
+      } catch (e) { ok(false); }
+    };
+  });
+}
+
+const PUSH_MAX = 5;          // 一度に出す通知の数（鳴りっぱなしを防ぎます）
+
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
-    let title = '新しいメール';
-    let body = '新着があります';
     const srcs = (await kvGet('pushSrc')) || [];
     const got = await Promise.all(srcs.map((s) =>
       askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
-    const live = got.filter((x) => x && x.d.n);
-    if (live.length) {
-      const total = live.reduce((a, x) => a + Number(x.d.n || 0), 0);
-      const head = live[0];
-      // ★「どこに」「誰から」「何の件名か」まで出します。
-      //   「新着があります」だけだと、開くまで分かりません
-      title = head.d.from ? head.d.from + '（' + head.name + '）' : head.name;
-      body = (head.d.subj || '（件名なし）')
-           + (total > 1 ? '\nほか ' + (total - 1) + '通' + (head.d.more ? '以上' : '') : '');
+    const live = got.filter((x) => x && x.d && x.d.n);
+
+    if (!live.length) {
+      // 受け口に聞けなかったときでも、黙っているよりは知らせます
+      await self.registration.showNotification('新しいメール', {
+        body: '新着があります', tag: 'mailboard-new', renotify: true,
+        icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png',
+      });
+      return;
     }
-    await self.registration.showNotification(title, {
-      body,
-      tag: 'mailboard-new',          // ★まとめて1つにします（鳴りっぱなしを防ぐ）
-      renotify: true,
-      icon: 'img/app-icon-192.png',
-      badge: 'img/app-icon-192.png',
-      data: { at: Date.now() },
+
+    // ★**1通ずつ、送り主と件名で**知らせます（2026-11-19）。
+    //   もう知らせた通は出しません。出すと、見るたびに同じ通知が並びます
+    const seen = (await kvGet('pushSeen')) || [];
+    const seenSet = new Set(seen.map(String));
+    const fresh = [];
+    live.forEach((x) => {
+      (x.d.list || []).forEach((m) => {
+        if (!m || !m.id || seenSet.has(String(m.id))) return;
+        fresh.push({ name: x.name, m });
+      });
     });
+
+    if (!fresh.length) return;          // 新しく知らせるものが無い
+
+    const show = fresh.slice(0, PUSH_MAX);
+    for (const { name, m } of show) {
+      await self.registration.showNotification(
+        (m.from || '差出人なし') + '（' + name + '）', {
+          body: m.subj || '（件名なし）',
+          tag: 'mail-' + m.id,          // ★1通ごとに別の印。並んで出ます
+          icon: 'img/app-icon-192.png',
+          badge: 'img/app-icon-192.png',
+          data: { at: Date.now() },
+        });
+    }
+    if (fresh.length > show.length) {
+      await self.registration.showNotification('ほか ' + (fresh.length - show.length) + '通', {
+        body: '新しいメールが届いています',
+        tag: 'mailboard-more', renotify: true,
+        icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png',
+      });
+    }
+    // 覚えておくのは新しい200件だけ（増え続けないように）
+    await kvSet('pushSeen', fresh.map((x) => String(x.m.id)).concat(seen).slice(0, 200));
   })());
 });
 

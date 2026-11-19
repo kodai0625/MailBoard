@@ -146,10 +146,23 @@ body.is-modal { overflow: hidden; }
 
 .pane { padding: 12px 12px 120px; min-width: 0; }
 
+/* ★この帯は中身が画面よりも横に長くなります。
+   **中だけで横に動く**ようにしないと、**ページごと左右に動きます**
+   （2026-11-19、ko-dai さんの「拡大はされなくても左右に動く」）。
+   箱のボタンの帯（.folders）には入れてあったのに、ここは入れ忘れていました。 */
 .listbar {
   display: flex; align-items: center; gap: 7px; padding: 0 2px 9px;
   font-size: 13px; color: var(--text-sub);
+  overflow-x: auto; scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.listbar::-webkit-scrollbar { display: none; }
+.listbar > * { flex: 0 0 auto; }
+
+/* ★念のための歯止め。ほかに横へはみ出すものが出ても、
+   ページごと動かないようにします（clip は「切るだけ」で、
+   中の固定表示＝上の帯のはたらきを壊しません）。 */
+#app { overflow-x: clip; }
 .pill {
   padding: 5px 11px; border-radius: 999px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line);
