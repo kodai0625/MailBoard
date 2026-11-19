@@ -1608,20 +1608,36 @@ async function syncNew(quiet) {
     //   受け口の sync は「今回あたらしく入れたぶん」しか返しません。
     //   ほかの誰か（1分おきの見張りなど）が先に取り込んでしまうと、
     //   **その通はアプリに永久に来ません。**2026-11-19 に実際そうなりました。
-    //   見張りのほうは直しましたが、すでに取りこぼしたぶんはここで埋めます。
+    //
+    //   ★はじめ「3,000通を超えたら見送る」にしていましたが、**間違いでした。**
+    //     実際の差は約3,500通で、会社のぶんがまるごと見送られ、
+    //     「新着はありません」と出続けました（同日、ko-dai さんの画面で判明）。
+    //     上限で切らず、**少しずつ、無くなるまで**取り戻します。
     for (const { src, d } of got) {
       if (!d) continue;
       const total = Number(d.indexed || 0);
-      const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
-      const gap = total - have;
-      if (gap <= 0) continue;
-      if (gap > 3000) continue;        // 多すぎるときは「続きを読み込む」の仕事です
-      try {
-        // 新しく足されたぶんは、索引のうしろに積まれます
-        const r2 = await Api.pull(src, Math.max(0, total - gap - 20), gap + 20);
-        added += mergeRows(r2.rows || [], src);
-      } catch (e) { /* 取り戻せなくても、次の回に */ }
+      const nm = srcName(src);
+      for (let round = 0; round < 40; round++) {       // 最大 4万通ぶん
+        const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
+        const gap = total - have;
+        if (gap <= 0) break;
+        if (!quiet || gap > 200) {
+          S.busy = nm + 'の取りこぼしを入れています… あと ' + gap.toLocaleString() + '通';
+          render();
+        }
+        try {
+          // 手元にあるのは索引の先頭から have 行ぶん。足りないのはその続きです
+          const take = Math.min(gap, 1000);
+          const r2 = await Api.pull(src, have, take);
+          const n2 = mergeRows(r2.rows || [], src);
+          added += n2;
+          if (!n2) break;                              // 進まないなら、やめます
+        } catch (e) {
+          break;                                       // 取り戻せなくても、次の回に
+        }
+      }
     }
+    S.busy = '';
 
     await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
@@ -1646,7 +1662,7 @@ async function syncNew(quiet) {
         return srcName(src) + ' ' + n.toLocaleString() + '通'
              + (t && t > n ? '（範囲は ' + t.toLocaleString() + '通）' : '');
       }).join('／');
-      toast(added ? added + '通が届いていました' : '新着はありません\n' + line);
+      toast(added ? added.toLocaleString() + '通が届いていました' : '新着はありません\n' + line);
     }
     render(); renderSources();
     recountSometimes();          // ★たまに合計を数え直します（下の説明）
