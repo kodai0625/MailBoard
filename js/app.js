@@ -44,6 +44,8 @@ const S = {
   watchBusy: 0,       // いま聞いている最中か
   recounting: 0,      // いま合計を数え直している最中か
   syncing: 0,         // 上の帯の「更新」を押している最中か
+  saving: 0,          // 索引を裏で書いている最中か
+  saveWant: false,    // 書き直しの頼みが来ているか
   pingMs: 0,          // 受け口に1回聞くのにかかった時間（ミリ秒）
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
@@ -676,17 +678,35 @@ async function markSelected(read) {
     const src = k.slice(0, i), id = k.slice(i + 1);
     (bySrc[src] = bySrc[src] || []).push(id);
   });
-  try {
-    S.busy = verb + 'にしています…'; render();
-    for (const src of Object.keys(bySrc)) await Api.read(src, bySrc[src], read);
-    applyRead(keys, read);
-    await Store.saveAll(S.rows);
-    S.sel.clear();
-    toast(keys.length.toLocaleString() + '通を' + verb + 'にしました');
-  } catch (e) {
-    toast(String(e.message || e), true);
-  } finally {
-    S.busy = ''; render();
+  /* ★先に画面を変えて、受け口へは**裏で**頼みます。
+   *
+   *   前は「受け口の返事」と「索引の書き戻し（5万3千行）」の両方を待ってから
+   *   画面を変えていたので、**31通でも何秒もかかって**いました
+   *   （2026-11-19、ko-dai さんの「一括で既読にする時間も長すぎる」）。
+   *
+   *   失敗したら、そのときに知らせて画面も戻します。
+   *   黙って食い違わせることはしません。
+   */
+  applyRead(keys, read);
+  S.sel.clear();
+  render();
+  saveSoon();
+  toast(keys.length.toLocaleString() + '通を' + verb + 'にしました');
+
+  // 受け口ごとに同時に頼みます（別々の Google アカウントなのでぶつかりません）
+  const srcs = Object.keys(bySrc);
+  const res = await Promise.all(srcs.map((src) =>
+    Api.read(src, bySrc[src], read).then(() => null).catch((e) => ({ src, e }))));
+  const ng = res.filter(Boolean);
+  if (ng.length) {
+    // ★戻します。画面だけ既読になって Gmail は未読のまま、では困ります
+    const back = [];
+    ng.forEach(({ src }) => bySrc[src].forEach((id) => back.push(src + ':' + id)));
+    applyRead(back, !read);
+    render();
+    saveSoon();
+    toast(ng.map((x) => srcName(x.src)).join('・') + ' は'
+          + verb + 'にできませんでした：' + String(ng[0].e.message || ng[0].e), true);
   }
 }
 
@@ -708,7 +728,7 @@ async function markStar(keys, on) {
     (bySrc[k.slice(0, i)] = bySrc[k.slice(0, i)] || []).push(k.slice(i + 1));
   });
   try {
-    for (const src of Object.keys(bySrc)) await Api.star(src, bySrc[src], on);
+    await Promise.all(Object.keys(bySrc).map((src) => Api.star(src, bySrc[src], on)));
     await Store.set('star', Array.from(S.star));
     toast(on ? 'フラグを付けました' : 'フラグを外しました');
   } catch (e) {
@@ -1475,6 +1495,10 @@ async function scanLoop(src) {
     S.scanning = false;
     S.busy = ''; render(); renderSources();
   }
+  // ★受け取り直したあとは、未読の印をそろえ直します。
+  //   受け口の表計算は未読を持たなくなったので（既読にするのを速くするため）、
+  //   そろえるのは Gmail から来る取り込みの役目です
+  await syncNew(true);
 }
 
 /** 新着を取り込む。ふだんはこちら */
@@ -1571,6 +1595,36 @@ async function addReplied(src, tids) {
   }
   if (n) await Store.set('replied', Array.from(S.replied));
   return n;
+}
+
+/**
+ * 索引を端末に書き戻します。**待ちません。**
+ *
+ * ★`Store.saveAll` は索引を**まるごと**書き直します（5万3千行なら2千行ずつ27回）。
+ *   待っていると、メールはもう画面に出ているのに**ボタンが回り続けます**
+ *   （2026-11-19、ko-dai さんの「更新ボタンがしばらく回っている」）。
+ *
+ * ★書けなくても困りません。次に取り込んだとき、手元と受け口の数を
+ *   見比べて足りないぶんを取り戻すので、そこで入り直します。
+ *
+ * ★同時に走らせません。重ねると、同じものを何度も書くだけ遅くなります。
+ */
+function saveSoon() {
+  S.saveWant = true;
+  if (S.saving) return;
+  S.saving = true;
+  (async () => {
+    try {
+      while (S.saveWant) {
+        S.saveWant = false;
+        await Store.saveAll(S.rows);
+      }
+    } catch (e) {
+      // 書けなかったことは画面に出しません（次の取り込みで取り戻せます）
+    } finally {
+      S.saving = false;
+    }
+  })();
 }
 
 async function syncNew(quiet) {
@@ -1685,7 +1739,7 @@ async function syncNew(quiet) {
     //   前は取り込みのたびに毎回やっていたので、**新着が無くても数秒かかって
     //   いました**（2026-11-19、ko-dai さんの「読み込みに非常に長い時間がかかる」）。
     //   ふだんは何も変わらないので、ほとんどの回はここを通りません。
-    if (dirty) await Store.saveAll(S.rows);
+    if (dirty) saveSoon();          // ★待ちません（上の説明）
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
     // 古い受け口のぶんだけ、ものさしを聞き直します
@@ -2870,6 +2924,7 @@ function bindEvents() {
         mergeRows(await pullAll(src), src);
         await Store.saveAll(S.rows);
         render(); renderSources();
+        await syncNew(true);          // ★未読の印をそろえ直します（上と同じ理由）
         // ★「足りない」しか見ていませんでした。多いときまで
         //   「そろっています」と言ってしまい、上の赤い字と
         //   食い違って、押しても直らないように見えました
