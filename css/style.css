@@ -70,14 +70,22 @@ body.is-modal { overflow: hidden; }
 .hd__row, .folders, .listbar, .cats { -webkit-user-select: none; user-select: none; }
 
 .hd__row { display: flex; align-items: center; gap: 8px; height: 44px; }
-/* 上の帯の「作成」。暗い帯の上なので、うっすら白い丸ボタンにします。
+/* 上の帯の「作成」。⚙ の右に、**大きく**置きます（ko-dai さんの指定）。
    ★`.hd` を前に付けています。`.hd__new` だけだと `.pill` と重みが同じで、
      **あとに書いてある `.pill` に負けて真っ白**になりました（2026-11-20）。 */
 .hd .hd__new {
-  background: rgba(255,255,255,.16); border-color: transparent; color: #fff;
-  font-size: 13.5px; padding: 6px 13px; flex: 0 0 auto;
+  background: var(--accent); border-color: transparent; color: var(--on-accent);
+  font-size: 15px; font-weight: 600; padding: 9px 18px; flex: 0 0 auto;
+  margin-left: 2px;
 }
-.hd .hd__new:hover { background: rgba(255,255,255,.26); }
+.hd .hd__new:hover { filter: brightness(1.1); }
+
+/* ★「作成」を大きくしたぶん、せまい画面では題名のほうを縮めます。
+   題名が押し出して、ボタンが画面の外へ出てしまわないように。 */
+.app-title--fit { min-width: 0; overflow: hidden; }
+.app-title--fit .app-title__main {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .app-title { margin: 0; font-size: 17px; display: flex; align-items: baseline; gap: 7px; }
 .app-title__mark { font-size: 10px; }
 .hd__cats { display: none; }
