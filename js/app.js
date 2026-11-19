@@ -1603,6 +1603,26 @@ async function syncNew(quiet) {
       }
     }
 
+    // ★受け口の索引のほうが多いときは、その差を取り戻します。
+    //
+    //   受け口の sync は「今回あたらしく入れたぶん」しか返しません。
+    //   ほかの誰か（1分おきの見張りなど）が先に取り込んでしまうと、
+    //   **その通はアプリに永久に来ません。**2026-11-19 に実際そうなりました。
+    //   見張りのほうは直しましたが、すでに取りこぼしたぶんはここで埋めます。
+    for (const { src, d } of got) {
+      if (!d) continue;
+      const total = Number(d.indexed || 0);
+      const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
+      const gap = total - have;
+      if (gap <= 0) continue;
+      if (gap > 3000) continue;        // 多すぎるときは「続きを読み込む」の仕事です
+      try {
+        // 新しく足されたぶんは、索引のうしろに積まれます
+        const r2 = await Api.pull(src, Math.max(0, total - gap - 20), gap + 20);
+        added += mergeRows(r2.rows || [], src);
+      } catch (e) { /* 取り戻せなくても、次の回に */ }
+    }
+
     await Store.saveAll(S.rows);
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
