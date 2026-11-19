@@ -23,7 +23,16 @@ html, body { margin: 0; padding: 0; }
      （2026-11-19、ko-dai さんの「検索欄より上をダブルタップするとまだ崩れる」）。
    ★`*` は重みがいちばん軽いので、下にある .edgeback の pan-y は残ります。 */
 *, *::before, *::after { touch-action: manipulation; }
-html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+
+/* ★iPhone で、画面の上を引っぱったときに出る**白い帯**を止めます
+   （2026-11-20、ko-dai さんの「スマホだと上の方が白くなる」）。
+
+   引っぱると、ページの下地（いちばん後ろの色）が見えます。そこが
+   明るい色だったので、上の帯の外側が白く見えていました。
+   ①引っぱり自体を止める ②それでも見えたときのために、下地も上の帯と同じ色に
+   の2つで押さえます。 */
+html, body { overscroll-behavior-y: none; }
+html { background: var(--header-bg); touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
@@ -61,6 +70,14 @@ body.is-modal { overflow: hidden; }
 .hd__row, .folders, .listbar, .cats { -webkit-user-select: none; user-select: none; }
 
 .hd__row { display: flex; align-items: center; gap: 8px; height: 44px; }
+/* 上の帯の「作成」。暗い帯の上なので、うっすら白い丸ボタンにします。
+   ★`.hd` を前に付けています。`.hd__new` だけだと `.pill` と重みが同じで、
+     **あとに書いてある `.pill` に負けて真っ白**になりました（2026-11-20）。 */
+.hd .hd__new {
+  background: rgba(255,255,255,.16); border-color: transparent; color: #fff;
+  font-size: 13.5px; padding: 6px 13px; flex: 0 0 auto;
+}
+.hd .hd__new:hover { background: rgba(255,255,255,.26); }
 .app-title { margin: 0; font-size: 17px; display: flex; align-items: baseline; gap: 7px; }
 .app-title__mark { font-size: 10px; }
 .hd__cats { display: none; }
