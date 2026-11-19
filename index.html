@@ -2,7 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- ★拡大を止めています（2026-11-19、ko-dai さんの「意図しない拡大・画面が壊れる」）。
+     ホーム画面から開いたアプリでは、この指定が効きます。
+     拡大が起きると、上の帯だけ元の位置に残って**画面が壊れて見えます。**
+     戻したいときは maximum-scale と user-scalable を外してください。 -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <!-- ★ホーム画面に出る文字だけ短くしています。正式な名前は
@@ -17,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="7c4f5d2949">
+<meta name="app-version" content="8c647a8d04">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -36,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=7c4f5d2949">
-<link rel="stylesheet" href="css/design.css?v=7c4f5d2949">
+<link rel="stylesheet" href="css/style.css?v=8c647a8d04">
+<link rel="stylesheet" href="css/design.css?v=8c647a8d04">
 </head>
 <body>
 
@@ -369,12 +373,12 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=7c4f5d2949"></script>
-<script src="js/store.js?v=7c4f5d2949"></script>
-<script src="js/api.js?v=7c4f5d2949"></script>
-<script src="js/update.js?v=7c4f5d2949"></script>
-<script src="js/rules.js?v=7c4f5d2949"></script>
-<script src="js/ai.js?v=7c4f5d2949"></script>
-<script src="js/app.js?v=7c4f5d2949"></script>
+<script src="js/config.js?v=8c647a8d04"></script>
+<script src="js/store.js?v=8c647a8d04"></script>
+<script src="js/api.js?v=8c647a8d04"></script>
+<script src="js/update.js?v=8c647a8d04"></script>
+<script src="js/rules.js?v=8c647a8d04"></script>
+<script src="js/ai.js?v=8c647a8d04"></script>
+<script src="js/app.js?v=8c647a8d04"></script>
 </body>
 </html>

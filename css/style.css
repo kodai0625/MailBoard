@@ -13,6 +13,11 @@ html, body { margin: 0; padding: 0; }
    hidden が負けて、返信や設定の面が最初から出てしまいます。 */
 [hidden] { display: none !important; }
 
+/* ★ダブルタップの拡大を止めます（2026-11-19）。
+   指でなぞる・つまむ（ピンチ）はそのままです。
+   拡大が起きると、上の帯だけ元の位置に残って**画面が壊れて見えます。** */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans",
                "Yu Gothic", "Noto Sans JP", sans-serif;
@@ -21,6 +26,7 @@ body {
   background: var(--bg);
   color: var(--text);
   -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
 }
 body.is-modal { overflow: hidden; }
 
@@ -58,8 +64,9 @@ body.is-modal { overflow: hidden; }
 
 .hd__search { padding: 2px 0 8px; }
 .hd__search input {
-  width: 100%; height: 34px; border: 0; border-radius: 9px;
+  width: 100%; height: 36px; border: 0; border-radius: 9px;
   padding: 0 12px; font: inherit;
+  font-size: 16px;                     /* ★16px 未満だと iOS が拡大します */
   background: rgba(255,255,255,.14); color: #fff;
 }
 .hd__search input::placeholder { color: rgba(255,255,255,.55); }
@@ -321,8 +328,13 @@ body.is-modal { overflow: hidden; }
 .sheet__body { flex: 1; overflow-y: auto; padding: 15px;
                padding-bottom: calc(40px + env(safe-area-inset-bottom)); }
 
+/* ★入力らんは**16px 以上**にします。
+   iOS は 16px 未満の入力らんに触ると、**勝手に画面を拡大します。**
+   ここが 15px（body からの継承）だったので、打つたびに拡大していました
+   （2026-11-19、ko-dai さんの「意図しない拡大・画面が壊れる」）。 */
 textarea, input, select {
-  font: inherit; color: var(--text); background: var(--surface);
+  font: inherit; font-size: 16px;
+  color: var(--text); background: var(--surface);
   border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px;
   width: 100%;
 }
@@ -444,7 +456,8 @@ input[type="number"] { width: 5.5em; }
 .sheet__hd .pill.is-on { background: var(--accent); color: var(--on-accent); }
 
 /* 読み込む範囲のらん */
-.src__q { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+/* ★16px より小さくしないこと（iOS が拡大します） */
+.src__q { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 16px; }
 .src .link { color: var(--accent); }
 
 /* 受け口のコードが最新かどうか */

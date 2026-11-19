@@ -941,19 +941,53 @@ function paintBody() {
  *   「いつ誰が開いたか」を送り返すためだけのものが混じっています。
  *   見たいときだけ「画像を表示」を押します。Mail.app と同じ考えです。
  */
+/**
+ * 差出人に選べるアドレスの一覧。
+ *
+ * ★**空になることがありません。**受け口の返事（aliases）が揃わない回でも、
+ *   集めた先のアドレス、それも無ければ登録してある自分のアドレスを出します。
+ *   ここが空だと選択らんごと消えて、**どのアドレスから出るのか分からなくなります。**
+ */
+function fromList() {
+  const pick = (src) => {
+    const out = [];
+    (src || []).forEach((a) => {
+      const v = String(a || '').trim();
+      if (v && out.indexOf(v) < 0) out.push(v);
+    });
+    return out;
+  };
+  // ★受け口が答えた「送れるアドレス」が本物です。
+  //   ここに無いアドレスから送ろうとすると、Gmail が断ります。
+  //   だから**足しません。**答えが返らなかったときだけ、下へ落とします
+  const real = pick(S.aliases);
+  if (real.length) return real;
+  const hosts = pick(Object.keys(S.hosts || {}).map((k) => S.hosts[k]));
+  if (hosts.length) return hosts;
+  return pick((MY_ADDRS || []).map((m) => m.addr));
+}
+
 function wrapBody(html, images) {
   const csp = images
     ? "default-src 'none'; style-src 'unsafe-inline'; img-src https: data: cid:;"
     : "default-src 'none'; style-src 'unsafe-inline'; img-src data:;";
   return '<!doctype html><html><head><meta charset="utf-8">'
     + '<meta http-equiv="Content-Security-Policy" content="' + csp + '">'
+    // ★枠の中にも「幅は画面と同じ」と教えます。
+    //   これが無いと、中身は 980px の画面として描かれ、字が小さくなり、
+    //   **触るたびに iOS が拡大します**（2026-11-19、ko-dai さんの
+    //   「本文を選択したときも拡大される」）。
+    + '<meta name="viewport" content="width=device-width, initial-scale=1, '
+    + 'maximum-scale=1, user-scalable=no">'
     // ★リンクは新しいタブへ。指定しないと、この枠の中で
     //   広告のページが開いてしまい、メールに戻れなくなります
     + '<base target="_blank">'
     + '<style>'
+    // ★ダブルタップの拡大も止めます。文字の自動拡大（iOS が勝手に大きくする）も
+    + 'html{-webkit-text-size-adjust:100%;touch-action:manipulation;}'
     + 'html,body{margin:0;padding:14px;font:15px/1.7 -apple-system,BlinkMacSystemFont,'
     + '"Hiragino Sans","Yu Gothic",sans-serif;color:#1a1d1a;background:#fff;'
-    + 'word-break:break-word;overflow-wrap:anywhere;}'
+    + 'word-break:break-word;overflow-wrap:anywhere;touch-action:manipulation;}'
     + 'img{max-width:100%;height:auto;}table{max-width:100%;}'
     + 'pre{white-space:pre-wrap;font:inherit;}'
     + '@media (prefers-color-scheme:dark){html,body{background:#fff;color:#1a1d1a;}}'
@@ -1133,13 +1167,14 @@ function openReply() {
   // ★仕事あてに来たメールに個人のアドレスで返すのを防ぐためです
   const box = folderOf(row);
   const from = $('#rFrom');
-  if (S.aliases.length > 1) {
-    from.innerHTML = S.aliases.map((a) => '<option value="' + esc(a) + '"'
-      + (a === box ? ' selected' : '') + '>' + esc(a) + '</option>').join('');
-    $('#rFromWrap').hidden = false;
-  } else {
-    $('#rFromWrap').hidden = true;
-  }
+  // ★**必ず出します。**前は「2つ以上あるとき」だけ出していたので、
+  //   受け口の返事が揃わなかった回には消えていました
+  //   （2026-11-19、ko-dai さんの「出る時と出ない時がある」）。
+  //   どのアドレスから出るのかは、毎回見えていないと困ります
+  const list = fromList();
+  from.innerHTML = list.map((a) => '<option value="' + esc(a) + '"'
+    + (a === box ? ' selected' : '') + '>' + esc(a) + '</option>').join('');
+  $('#rFromWrap').hidden = false;
   $('#rText').value = '';
   const ar = $('#rAiRow');
   if (ar) { ar.hidden = S.demo || !AI.ready(); $('#rAiNote').value = ''; }
@@ -1177,13 +1212,9 @@ function openCompose() {
   $('#cText').value = '';
 
   const from = $('#cFrom');
-  if (S.aliases.length > 1) {
-    from.innerHTML = S.aliases
-      .map((a) => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
-    $('#cFromWrap').hidden = false;
-  } else {
-    $('#cFromWrap').hidden = true;
-  }
+  from.innerHTML = fromList()
+    .map((a) => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
+  $('#cFromWrap').hidden = false;      // ★必ず出します（上の説明と同じ）
 
   const car = $('#cAiRow');
   if (car) { car.hidden = !AI.ready(); $('#cAiNote').value = ''; }
