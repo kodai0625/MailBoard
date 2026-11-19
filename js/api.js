@@ -131,6 +131,7 @@ const Api = {
   recount(src) { return this.post(src, 'recount', {}); },
   pushKey(src) { return this.post(src, 'pushKey', {}); },
   pushAdd(src, endpoint, ua) { return this.post(src, 'pushAdd', { endpoint, ua }); },
+  pushHas(src, endpoint) { return this.post(src, 'pushHas', { endpoint }); },
   pushDel(src, endpoint) { return this.post(src, 'pushDel', { endpoint }); },
   pull(src, offset, limit) { return this.post(src, 'pull', { offset, limit }); },
   body(src, id) { return this.post(src, 'body', { id }); },

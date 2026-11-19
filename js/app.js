@@ -1750,10 +1750,33 @@ async function renderPush() {
   const sub = await pushSub();
   const yes = !!sub && Notification.permission === 'granted';
   on.hidden = yes; off.hidden = !yes;
-  note.textContent = yes ? 'この端末は受け取ります。'
-    : Notification.permission === 'denied'
+  if (!yes) {
+    note.textContent = Notification.permission === 'denied'
       ? '通知が断られています。端末の設定から Mail Board の通知を許可してください。'
       : 'まだ受け取っていません。';
+    return;
+  }
+  // ★ここまでは「端末の中」の話です。**受け口が知っているか**は別なので、聞きます。
+  //   前は端末の中だけを見て「受け取ります」と出していたので、
+  //   受け口に登録できていなくても気づけませんでした（2026-11-19）。
+  note.textContent = 'この端末は受け取ります。受け口を確かめています…';
+  const live = Api.live();
+  const ng = [];
+  for (const src of live) {
+    try {
+      const d = await Api.pushHas(src, sub.endpoint);
+      if (d.has) continue;
+      // 知らなければ、その場で登録し直します（押し直さずに済むように）
+      await Api.pushAdd(src, sub.endpoint, navigator.userAgent);
+      const again = await Api.pushHas(src, sub.endpoint);
+      if (!again.has) ng.push(srcName(src));
+    } catch (e) {
+      ng.push(srcName(src) + '（' + String(e.message || e).slice(0, 40) + '）');
+    }
+  }
+  note.textContent = ng.length
+    ? '★' + ng.join('・') + ' の受け口に登録できていません。'
+    : 'この端末は受け取ります（受け口' + live.length + 'つとも登録ずみ）。';
 }
 
 async function pushTurnOn() {
