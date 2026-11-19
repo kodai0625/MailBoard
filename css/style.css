@@ -75,7 +75,10 @@ body.is-modal { overflow: hidden; }
      **あとに書いてある `.pill` に負けて真っ白**になりました（2026-11-20）。 */
 .hd .hd__new {
   background: var(--accent); border-color: transparent; color: var(--on-accent);
-  font-size: 15px; font-weight: 600; padding: 9px 18px; flex: 0 0 auto;
+  font-size: 15px; font-weight: 600; padding: 9px 18px;
+  /* ★残っている幅いっぱいまで伸ばします（2026-11-20、ko-dai さんの指定）。
+     指で押す的が大きいほど、外しません。 */
+  flex: 1 1 auto; min-width: 84px;
   margin-left: 2px;
 }
 .hd .hd__new:hover { filter: brightness(1.1); }
