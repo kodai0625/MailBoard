@@ -15,7 +15,14 @@ html, body { margin: 0; padding: 0; }
 
 /* ★ダブルタップの拡大を止めます（2026-11-19）。
    指でなぞる・つまむ（ピンチ）はそのままです。
-   拡大が起きると、上の帯だけ元の位置に残って**画面が壊れて見えます。** */
+   拡大が起きると、上の帯だけ元の位置に残って**画面が壊れて見えます。**
+
+   ★**すべての要素に当てます。**touch-action は**受け継がれません。**
+     html と body にだけ書いたら、上の帯（題名や ☰ のあたり）では効かず、
+     そこをダブルタップすると、まだ崩れました
+     （2026-11-19、ko-dai さんの「検索欄より上をダブルタップするとまだ崩れる」）。
+   ★`*` は重みがいちばん軽いので、下にある .edgeback の pan-y は残ります。 */
+*, *::before, *::after { touch-action: manipulation; }
 html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 
 body {
@@ -48,6 +55,11 @@ body.is-modal { overflow: hidden; }
   color: #fff;
   padding: max(env(safe-area-inset-top), 8px) 12px 0;
 }
+/* ★上の帯・箱のボタン・一覧の帯は、文字を選べないようにします。
+   Safari は**文字をダブルタップすると「その段落に合わせて拡大」**しようとします。
+   選べなければ、そこが起きません（検索らんと本文は、ふつうに選べます）。 */
+.hd__row, .folders, .listbar, .cats { -webkit-user-select: none; user-select: none; }
+
 .hd__row { display: flex; align-items: center; gap: 8px; height: 44px; }
 .app-title { margin: 0; font-size: 17px; display: flex; align-items: baseline; gap: 7px; }
 .app-title__mark { font-size: 10px; }
