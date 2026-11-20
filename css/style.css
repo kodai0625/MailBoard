@@ -341,7 +341,14 @@ body.is-modal { overflow: hidden; }
 .airow { display: flex; gap: 8px; margin-bottom: 9px; }
 .airow input { flex: 1; min-width: 0; }
 .airow .pill { flex: 0 0 auto; white-space: nowrap; }
-@media (max-width: 520px) { .airow { flex-wrap: wrap; } .airow .pill { width: 100%; } }
+/* ★せまい画面では、らんを1行目・ボタンを2行目に折り返します。
+   ボタンが2つになったので（「Claude アプリに渡す」。2026-11-21）、
+   **横にならべて半分ずつ**にします。縦に2つ積むと、本文が押し下げられます。 */
+@media (max-width: 520px) {
+  .airow { flex-wrap: wrap; }
+  .airow input { flex: 1 0 100%; }
+  .airow .pill { flex: 1 1 0; min-width: 0; white-space: normal; }
+}
 
 /* ---- テンプレの穴うめ ---- */
 /* ★返信・新しく書く の**上**に出します。

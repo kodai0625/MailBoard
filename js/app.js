@@ -1325,16 +1325,50 @@ function renderAiRow(where) {
   const note = $(isNew ? '#cAiNote' : '#rAiNote');
   const go = $(isNew ? '#cAiGo' : '#rAiGo');
   const set = $(isNew ? '#cAiSet' : '#rAiSet');
+  const hand = $(isNew ? '#cAiHand' : '#rAiHand');
   const ready = AI.ready() && !S.demo;
+  /* ★「Claude アプリに渡す」は、**つないでいなくても使えます**。
+   *   Mac が切れている・寝ているときのための道だからです（2026-11-21）。
+   *   見本のときだけ出しません。 */
+  const canHand = !S.demo;
   row.hidden = false;
   note.value = '';
-  note.disabled = !ready;
-  note.placeholder = ready
+  note.disabled = !ready && !canHand;
+  note.placeholder = (ready || canHand)
     ? (isNew ? '何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）'
              : 'どう返すか、ひとことで（例：お礼と、到着は20時ごろ）')
-    : (S.demo ? '見本なので使えません' : 'Mac の Hub Board につなぐと、AI が文面を書きます');
+    : '見本なので使えません';
   go.hidden = !ready;
+  if (hand) hand.hidden = !canHand;
   if (set) set.hidden = ready || S.demo;
+}
+
+/**
+ * AI に渡す中身を作ります（「書いてもらう」と「Claude アプリに渡す」で同じもの）。
+ * ★2つの場所に同じ組み立てを書くと、片方だけ直して食い違います。
+ */
+function aiMessage(where) {
+  const isNew = (where === 'new');
+  const noteEl = $(isNew ? '#cAiNote' : '#rAiNote');
+  const note = noteEl ? noteEl.value.trim() : '';
+  if (isNew) {
+    return {
+      mode: 'new', box: composeBox(),
+      to: $('#cTo').value.trim(), subject: $('#cSubj').value.trim(), note,
+    };
+  }
+  const row = rowByKey(S.openKey);
+  if (!row) return null;
+  const d = S._body || {};
+  return {
+    mode: 'reply', box: folderName(folderOf(row)) || '',
+    from: String(row[F.FROM] || ''), fromName: String(row[F.NAME] || ''),
+    subject: String(row[F.SUBJ] || ''),
+    // 本文がまだ来ていなければ、索引にある冒頭だけで書いてもらいます
+    body: String(d.text || '').trim() || stripTags(String(d.html || '')) || String(row[F.SNIP] || ''),
+    snippet: String(row[F.SNIP] || ''),
+    note,
+  };
 }
 
 async function aiWrite(where) {
@@ -1344,27 +1378,8 @@ async function aiWrite(where) {
   const btn = $(isNew ? '#cAiGo' : '#rAiGo');
   if (!noteEl || !textEl || !btn) return;
 
-  let m;
-  if (isNew) {
-    m = {
-      mode: 'new', box: composeBox(),
-      to: $('#cTo').value.trim(), subject: $('#cSubj').value.trim(),
-      note: noteEl.value.trim(),
-    };
-  } else {
-    const row = rowByKey(S.openKey);
-    if (!row) return;
-    const d = S._body || {};
-    m = {
-      mode: 'reply', box: folderName(folderOf(row)) || '',
-      from: String(row[F.FROM] || ''), fromName: String(row[F.NAME] || ''),
-      subject: String(row[F.SUBJ] || ''),
-      // 本文がまだ来ていなければ、索引にある冒頭だけで書いてもらいます
-      body: String(d.text || '').trim() || stripTags(String(d.html || '')) || String(row[F.SNIP] || ''),
-      snippet: String(row[F.SNIP] || ''),
-      note: noteEl.value.trim(),
-    };
-  }
+  const m = aiMessage(where);
+  if (!m) return;
 
   const was = btn.textContent;
   btn.disabled = true;
@@ -1382,6 +1397,30 @@ async function aiWrite(where) {
     btn.disabled = false;
     btn.textContent = was;
   }
+}
+
+/**
+ * Claude アプリに渡します（Mac が切れているとき）。
+ *
+ * ★文面を書くのは Mac の中の Claude なので、Mac が寝ていると使えません。
+ *   そこで**頼み文だけを組み立ててコピー**し、iPhone の Claude アプリに
+ *   貼ってもらいます。ko-dai さんのふだんのプランで動くので、
+ *   別の請求は立ちません（2026-11-21 ko-dai さんの選択）。
+ *
+ * ★手本（過去に返した文）は Mac の中にしかないので入りません。
+ *   「自分のこと」は端末に写してあるので入ります。
+ */
+async function aiHandoff(where) {
+  const btn = $(where === 'new' ? '#cAiHand' : '#rAiHand');
+  if (!btn) return;
+  const m = aiMessage(where);
+  if (!m) return;
+  const was = btn.textContent;
+  const ok = await AI.copy(AI.prompt(m));
+  if (!ok) { toast('コピーできませんでした', true); return; }
+  btn.textContent = 'コピーしました';
+  setTimeout(() => { btn.textContent = was; }, 2000);
+  toast('Claude アプリをひらいて貼り付け、返ってきた文をここに貼ってください');
 }
 
 /**
@@ -2521,6 +2560,10 @@ async function boot() {
   }
   Updater.start();
   loadAddrs();
+  /* ★つながっているうちに「自分のこと」を**端末に写して**おきます。
+   *   Mac が切れているときの「Claude アプリに渡す」で使うためです。
+   *   取れなくても何もしません（2026-11-21）。 */
+  if (AI.ready() && !S.demo) AI.profile().catch(() => {});
 
   const live = Api.live();
   if (!live.length) {
@@ -2824,6 +2867,8 @@ function bindEvents() {
   });
 
   // つないでいないときは、設定へ案内します
+  on('#rAiHand', 'click', () => aiHandoff('reply'));
+  on('#cAiHand', 'click', () => aiHandoff('new'));
   on('#rAiSet', 'click', () => { $('#reply').hidden = true; openSettings(); aiJump(); });
   on('#cAiSet', 'click', () => { $('#compose').hidden = true; openSettings(); aiJump(); });
   on('#rAiGo', 'click', () => aiWrite('reply'));

@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="1c095e3502">
+<meta name="app-version" content="ac342d9433">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=1c095e3502">
-<link rel="stylesheet" href="css/design.css?v=1c095e3502">
+<link rel="stylesheet" href="css/style.css?v=ac342d9433">
+<link rel="stylesheet" href="css/design.css?v=ac342d9433">
 </head>
 <body>
 
@@ -207,6 +207,8 @@
     <div class="airow" id="rAiRow">
       <input id="rAiNote" autocomplete="off" placeholder="どう返すか、ひとことで（例：お礼と、到着は20時ごろ）">
       <button class="pill pill--go" id="rAiGo">AIに書いてもらう</button>
+      <!-- ★Mac が切れているとき用。頼み文をコピーして、iPhone の Claude アプリに貼ります -->
+      <button class="pill" id="rAiHand">Claude アプリに渡す</button>
       <button class="pill" id="rAiSet" hidden>⚙ でつなぐ</button>
     </div>
     <div class="tplbar" id="rTpl"></div>
@@ -236,6 +238,8 @@
     <div class="airow" id="cAiRow">
       <input id="cAiNote" autocomplete="off" placeholder="何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）">
       <button class="pill pill--go" id="cAiGo">AIに書いてもらう</button>
+      <!-- ★Mac が切れているとき用。頼み文をコピーして、iPhone の Claude アプリに貼ります -->
+      <button class="pill" id="cAiHand">Claude アプリに渡す</button>
       <button class="pill" id="cAiSet" hidden>⚙ でつなぐ</button>
     </div>
     <div class="tplbar" id="cTpl"></div>
@@ -394,13 +398,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=1c095e3502"></script>
-<script src="js/store.js?v=1c095e3502"></script>
-<script src="js/api.js?v=1c095e3502"></script>
-<script src="js/update.js?v=1c095e3502"></script>
-<script src="js/rules.js?v=1c095e3502"></script>
-<script src="js/ai.js?v=1c095e3502"></script>
-<script src="js/fill.js?v=1c095e3502"></script>
-<script src="js/app.js?v=1c095e3502"></script>
+<script src="js/config.js?v=ac342d9433"></script>
+<script src="js/store.js?v=ac342d9433"></script>
+<script src="js/api.js?v=ac342d9433"></script>
+<script src="js/update.js?v=ac342d9433"></script>
+<script src="js/rules.js?v=ac342d9433"></script>
+<script src="js/ai.js?v=ac342d9433"></script>
+<script src="js/fill.js?v=ac342d9433"></script>
+<script src="js/app.js?v=ac342d9433"></script>
 </body>
 </html>
