@@ -303,6 +303,15 @@ body.is-modal { overflow: hidden; }
   background: var(--bg);
   display: flex; flex-direction: column;
 }
+/* ★本文の画面は、**一覧の画面より上**に出します。
+ *   同じ重なりだと、HTML であとに書いてあるほうが前に出ます。
+ *   送信済み（#sent）は本文（#detail）より下に書いてあるので、
+ *   どちらも 60 のままだと**本文が送信済みの後ろに開き、
+ *   押しても何も起きないように見えました**（2026-11-21、ko-dai さんの指摘）。
+ *   ★一覧の画面（#senders・#sent・#settings）は 60、本文は 65、
+ *     本文の上に出すもの（返信・新しく書く）は 70、穴うめは 80、
+ *     「新しい版があります」の帯は 95。**この順を崩さないこと。** */
+#detail { z-index: 65; }
 .sheet--sub { z-index: 70; }
 .sheet__hd {
   display: flex; align-items: center; gap: 7px;
