@@ -497,7 +497,9 @@ input[type="number"] { width: 5.5em; }
 /* ---- 新しい版の知らせ ---- */
 .updbar {
   position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 80;
+  /* ★90 より上。返信や穴うめの画面（70〜80）と同じだと、
+   *   そちらに隠れて**押す機会がありませんでした**（2026-11-20） */
+  bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 95;
   display: flex; align-items: center; gap: 11px;
   padding: 8px 10px 8px 16px; border-radius: 999px;
   background: var(--surface); border: 1px solid var(--line);

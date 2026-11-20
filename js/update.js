@@ -95,8 +95,13 @@ const Updater = {
     this.registerWorker();
     if (!this.current()) return;
 
+    /* ★押したら**控えを捨ててから**読み直します（force）。
+     *   前は URL に印を付けるだけ（apply）でしたが、それだと
+     *   端末に残っている控えが使われ続けることがありました
+     *   （2026-11-20、ko-dai さんの Mac。開き直しても変わらなかった）。
+     *   ★世話係（sw.js）は**外しません**。外すと通知の登録も消えるためです。 */
     const bar = document.getElementById('updateBar');
-    if (bar) bar.querySelector('button').addEventListener('click', () => this.apply());
+    if (bar) bar.querySelector('button').addEventListener('click', () => this.force());
 
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) this.check();

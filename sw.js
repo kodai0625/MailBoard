@@ -18,12 +18,21 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 58d7f6b7c6 を版の印に
+ *  ★このファイルは 公開用を作る.py が 1c095e3502 を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '58d7f6b7c6';
+const VERSION = '1c095e3502';
 const CACHE = 'mailboard-' + VERSION;
+
+/* ★公開したものかどうか。
+ *   公開のときだけ、上の版の印が本物（16進）に書き換わります。
+ *   **Mac の確認用（localhost）では、ここが置き換わらないので印が動きません。**
+ *   印が動かないと「?v= が変われば控えも変わる」という前提がくずれ、
+ *   直したのに**いつまでも古いものが出続けます**
+ *   （2026-11-20、ko-dai さんの Mac で起きました。開き直しても変わらなかった）。
+ *   なので、公開したものでなければ**控えを使いません。** */
+const BUILT = /^[0-9a-f]{6,}$/.test(VERSION);
 
 /* 新しいこのファイルが届いたら、前のものを待たずにすぐ交代します */
 self.addEventListener('install', () => {
@@ -49,7 +58,16 @@ async function keep(req, res) {
 /** 通信を先に試し、だめなら控えを出す（ページ本体むけ） */
 async function networkFirst(req) {
   try {
-    return await keep(req, await fetch(req));
+    /* ★`cache: 'reload'` ＝ ブラウザの控えを見ずに、本当に取りに行きます。
+     *   GitHub Pages は「10分は控えていい」と言ってくるので、これが無いと
+     *   公開した直後に開き直しても**古い index.html が返って**きました
+     *   （2026-11-20）。古いブラウザでは使えないので、だめなら元のやり方に戻します。 */
+    try {
+      return await keep(req, await fetch(req, { cache: 'reload' }));
+    } catch (e2) {
+      if (e2 instanceof TypeError) return await keep(req, await fetch(req));
+      throw e2;
+    }
   } catch (err) {
     const hit = await caches.match(req, { ignoreSearch: true });
     if (hit) return hit;
@@ -76,7 +94,7 @@ self.addEventListener('fetch', (e) => {
   if (req.mode === 'navigate') { e.respondWith(networkFirst(req)); return; }
 
   // 中身が変われば印（?v=）も変わるので、控えをそのまま使ってよい
-  if (url.searchParams.has('v')) { e.respondWith(cacheFirst(req)); return; }
+  if (BUILT && url.searchParams.has('v')) { e.respondWith(cacheFirst(req)); return; }
 
   e.respondWith(networkFirst(req));
 });
