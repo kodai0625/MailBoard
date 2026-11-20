@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="205b12fa8a">
+<meta name="app-version" content="b35c53bd14">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=205b12fa8a">
-<link rel="stylesheet" href="css/design.css?v=205b12fa8a">
+<link rel="stylesheet" href="css/style.css?v=b35c53bd14">
+<link rel="stylesheet" href="css/design.css?v=b35c53bd14">
 </head>
 <body>
 
@@ -175,6 +175,24 @@
 </div>
 
 <!-- ===== 返信 ===== -->
+<!-- ===== テンプレの穴うめ =====
+     ★【　】のところを、打たずに選べるようにします
+     （2026-11-20、ko-dai さんの「カッコやスペースを消して打つのが手間」）。 -->
+<div class="sheet sheet--sub" id="fill" hidden>
+  <div class="sheet__hd">
+    <button class="iconbtn" id="fillClose" aria-label="やめる"><svg class="ico"><use href="#i-back"/></svg></button>
+    <h2 class="sheet__t" id="fillTitle">埋める</h2>
+    <span class="spacer"></span>
+    <button class="pill" id="fillRaw">そのまま入れる</button>
+    <button class="pill pill--go" id="fillGo">入れる</button>
+  </div>
+  <div class="sheet__body">
+    <p class="muted small">埋めたいところだけ直せば大丈夫です。
+      空のままにすると【　】が残るので、送る前に気づけます。</p>
+    <div id="fillBox"></div>
+  </div>
+</div>
+
 <div class="sheet sheet--sub" id="reply" hidden>
   <div class="sheet__hd">
     <button class="iconbtn" id="rClose" aria-label="閉じる"><svg class="ico"><use href="#i-back"/></svg></button>
@@ -186,9 +204,10 @@
   <div class="sheet__body">
     <p class="muted">宛先： <span id="rTo"></span></p>
     <p class="muted" id="rFromWrap" hidden>差出人： <select id="rFrom"></select></p>
-    <div class="airow" id="rAiRow" hidden>
+    <div class="airow" id="rAiRow">
       <input id="rAiNote" autocomplete="off" placeholder="どう返すか、ひとことで（例：お礼と、到着は20時ごろ）">
       <button class="pill pill--go" id="rAiGo">AIに書いてもらう</button>
+      <button class="pill" id="rAiSet" hidden>⚙ でつなぐ</button>
     </div>
     <div class="tplbar" id="rTpl"></div>
     <textarea id="rText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
@@ -214,9 +233,10 @@
     <label class="lbl">件名</label>
     <input id="cSubj" autocomplete="off">
     <label class="lbl">本文</label>
-    <div class="airow" id="cAiRow" hidden>
+    <div class="airow" id="cAiRow">
       <input id="cAiNote" autocomplete="off" placeholder="何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）">
       <button class="pill pill--go" id="cAiGo">AIに書いてもらう</button>
+      <button class="pill" id="cAiSet" hidden>⚙ でつなぐ</button>
     </div>
     <div class="tplbar" id="cTpl"></div>
     <textarea id="cText" rows="14" placeholder="ここに本文を書きます。上のテンプレを押すと差し込まれます"></textarea>
@@ -374,12 +394,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=205b12fa8a"></script>
-<script src="js/store.js?v=205b12fa8a"></script>
-<script src="js/api.js?v=205b12fa8a"></script>
-<script src="js/update.js?v=205b12fa8a"></script>
-<script src="js/rules.js?v=205b12fa8a"></script>
-<script src="js/ai.js?v=205b12fa8a"></script>
-<script src="js/app.js?v=205b12fa8a"></script>
+<script src="js/config.js?v=b35c53bd14"></script>
+<script src="js/store.js?v=b35c53bd14"></script>
+<script src="js/api.js?v=b35c53bd14"></script>
+<script src="js/update.js?v=b35c53bd14"></script>
+<script src="js/rules.js?v=b35c53bd14"></script>
+<script src="js/ai.js?v=b35c53bd14"></script>
+<script src="js/fill.js?v=b35c53bd14"></script>
+<script src="js/app.js?v=b35c53bd14"></script>
 </body>
 </html>

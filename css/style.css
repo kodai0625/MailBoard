@@ -343,6 +343,21 @@ body.is-modal { overflow: hidden; }
 .airow .pill { flex: 0 0 auto; white-space: nowrap; }
 @media (max-width: 520px) { .airow { flex-wrap: wrap; } .airow .pill { width: 100%; } }
 
+/* ---- テンプレの穴うめ ---- */
+/* ★返信・新しく書く の**上**に出します。
+   同じ重なりだと、あとに書いてあるほう（返信）が勝って、下に隠れます
+   （2026-11-20、実際そうなりました）。 */
+#fill { z-index: 80; }
+.fill__f { margin: 0 0 16px; }
+.fill__f .lbl { display: block; margin-bottom: 5px; }
+.fill__s { margin: 4px 2px 0; color: var(--text-weak); }
+.fill__p { margin: 5px 2px 0; color: var(--accent); font-weight: 600; }
+.fill__row { display: flex; gap: 8px; align-items: center; }
+.fill__row input[type="number"] { width: 5.5em; flex: 0 0 auto; }
+.fill__row input[type="date"], .fill__row input[type="time"] { flex: 1; min-width: 0; }
+.fill__u { flex: 0 0 auto; color: var(--text-sub); font-size: 14px; }
+.fill__other { margin-top: 7px; }
+
 /* 配信停止のお知らせ */
 .unsub { margin: 9px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text);
          background: var(--surface-2); border: 1px solid var(--line);

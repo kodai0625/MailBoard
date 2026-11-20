@@ -46,6 +46,7 @@ const S = {
   syncing: 0,         // 上の帯の「更新」を押している最中か
   saving: 0,          // 索引を裏で書いている最中か
   saveWant: false,    // 書き直しの頼みが来ているか
+  fill: null,         // テンプレの穴うめで、いま開いているもの
   pingMs: 0,          // 受け口に1回聞くのにかかった時間（ミリ秒）
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
@@ -1196,8 +1197,7 @@ function openReply() {
     + (a === box ? ' selected' : '') + '>' + esc(a) + '</option>').join('');
   $('#rFromWrap').hidden = false;
   $('#rText').value = '';
-  const ar = $('#rAiRow');
-  if (ar) { ar.hidden = S.demo || !AI.ready(); $('#rAiNote').value = ''; }
+  renderAiRow('reply');
   $('#rTpl').innerHTML = S.tpl.length
     ? S.tpl.map((t, i) => '<button class="tplchip" data-tpl="' + i + '">' + esc(t[1]) + '</button>').join('')
     : '<span class="muted">テンプレはまだありません。設定から足せます</span>';
@@ -1206,15 +1206,9 @@ function openReply() {
   $('#rText').focus();
 }
 
-function useTemplate(i) {
-  const t = S.tpl[i];
-  if (!t) return;
-  const name = $('#rTpl').dataset.name || '';
-  const cur = $('#rText').value;
-  const body = String(t[2] || '').replace(/\{name\}/g, name);
-  $('#rText').value = cur ? cur + '\n\n' + body : body;
-  $('#rText').focus();
-}
+// ★【　】があれば、穴うめの画面をひらきます（js/fill.js）。
+//   無ければ今までどおり、そのまま差し込みます
+function useTemplate(i) { openFill(i, 'reply'); }
 
 /* ============================================================
  *  新しく書く（返信ではないメール）
@@ -1236,8 +1230,7 @@ function openCompose() {
     .map((a) => '<option value="' + esc(a) + '">' + esc(a) + '</option>').join('');
   $('#cFromWrap').hidden = false;      // ★必ず出します（上の説明と同じ）
 
-  const car = $('#cAiRow');
-  if (car) { car.hidden = !AI.ready(); $('#cAiNote').value = ''; }
+  renderAiRow('new');
   $('#cTpl').innerHTML = S.tpl.length
     ? S.tpl.map((t, i) => '<button class="tplchip" data-ctpl="' + i + '">' + esc(t[1]) + '</button>').join('')
     : '<span class="muted">テンプレはまだありません。設定から足せます</span>';
@@ -1263,14 +1256,7 @@ function closeCompose() {
  *   分からないので、空にすると「 様」だけが残ります。
  *   そのまま出しておけば、埋め忘れに気づけます。
  */
-function useTemplateCompose(i) {
-  const t = S.tpl[i];
-  if (!t) return;
-  const cur = $('#cText').value;
-  const body = String(t[2] || '');
-  $('#cText').value = cur ? cur + '\n\n' + body : body;
-  $('#cText').focus();
-}
+function useTemplateCompose(i) { openFill(i, 'new'); }
 
 async function sendNew(asDraft) {
   const to = $('#cTo').value.trim();
@@ -1318,6 +1304,39 @@ async function sendNew(asDraft) {
  *  ★返ってきた文は**足します。上書きしません。**
  *    自分で打った文が消えるほうが困るためです。
  * ========================================================== */
+/**
+ * AI のらんを出します。
+ *
+ * ★つないでいないとき、前は**らんごと消して**いました。
+ *   そうすると「この画面には AI が無い」と見えます
+ *   （2026-11-20、ko-dai さんの「新規作成から AI を使えるように」）。
+ *   **出したうえで、つなぎ方へ案内します。**
+ */
+/** 設定の「AI に書いてもらう」のところまで送ります */
+function aiJump() {
+  const el = $('#aiUrl') || $('#aiProfile');
+  if (el) setTimeout(() => el.scrollIntoView({ block: 'center' }), 60);
+}
+
+function renderAiRow(where) {
+  const isNew = where === 'new';
+  const row = $(isNew ? '#cAiRow' : '#rAiRow');
+  if (!row) return;
+  const note = $(isNew ? '#cAiNote' : '#rAiNote');
+  const go = $(isNew ? '#cAiGo' : '#rAiGo');
+  const set = $(isNew ? '#cAiSet' : '#rAiSet');
+  const ready = AI.ready() && !S.demo;
+  row.hidden = false;
+  note.value = '';
+  note.disabled = !ready;
+  note.placeholder = ready
+    ? (isNew ? '何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）'
+             : 'どう返すか、ひとことで（例：お礼と、到着は20時ごろ）')
+    : (S.demo ? '見本なので使えません' : 'Mac の Hub Board につなぐと、AI が文面を書きます');
+  go.hidden = !ready;
+  if (set) set.hidden = ready || S.demo;
+}
+
 async function aiWrite(where) {
   const isNew = (where === 'new');
   const noteEl = $(isNew ? '#cAiNote' : '#rAiNote');
@@ -2804,6 +2823,9 @@ function bindEvents() {
     catch (e) { toast(String(e.message || e), true); }
   });
 
+  // つないでいないときは、設定へ案内します
+  on('#rAiSet', 'click', () => { $('#reply').hidden = true; openSettings(); aiJump(); });
+  on('#cAiSet', 'click', () => { $('#compose').hidden = true; openSettings(); aiJump(); });
   on('#rAiGo', 'click', () => aiWrite('reply'));
   on('#cAiGo', 'click', () => aiWrite('new'));
 
@@ -3003,6 +3025,29 @@ function bindEvents() {
     S.tpl.push(['u' + Date.now(), '新しいテンプレ', '', S.tpl.length + 1]);
     renderTpl();
   });
+  // ---- テンプレの穴うめ ----
+  on('#fillClose', 'click', closeFill);
+  on('#fillGo', 'click', () => {
+    const where = S.fill.where;
+    fillInsert(fillBuild(), where);
+    closeFill();
+  });
+  on('#fillRaw', 'click', () => {
+    const where = S.fill.where;
+    fillInsert(String(S.tpl[S.fill.i][2] || ''), where);
+    closeFill();
+  });
+  // 滞在の「こうなります」を、いじるたびに出し直します
+  on('#fillBox', 'input', fillPreview);
+  on('#fillBox', 'change', (e) => {
+    fillPreview();
+    // 窓口で「自分で打つ」を選んだら、打つらんを出します
+    const sel = e.target.closest('select[data-n]');
+    if (!sel) return;
+    const other = $('#f' + sel.dataset.n + 'o');
+    if (other) other.hidden = !!sel.value;
+  });
+
   on('#pushOn', 'click', pushTurnOn);
   on('#pushOff', 'click', pushTurnOff);
 
