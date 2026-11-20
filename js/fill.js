@@ -9,14 +9,12 @@
  *    見分けられないものは、ふつうの文字らんになります（損をしません）。
  * ========================================================== */
 
-/** よく使う予約の窓口。ここに無ければ、自分で打てます */
+/** 予約の窓口（ko-dai さんの指定、2026-11-20）。ここに無ければ自分で打てます */
 const FILL_SITES = [
-  'アメックス・トラベル（FHR）', 'アメックス・トラベル',
-  '一休.com', '楽天トラベル', 'じゃらん', 'agoda', 'エクスペディア',
-  'Booking.com', 'Hotels.com', 'ホテル公式サイト', '電話',
+  'agoda', 'Expedia', 'American Express Travel', '楽天トラベル', 'Trip.com',
 ];
 
-const FILL_SITE_WORDS = /アメックス|AMEX|FHR|一休|楽天トラベル|じゃらん|agoda|エクスペディア|Expedia|Booking|Hotels\.com|公式サイト/i;
+const FILL_SITE_WORDS = /アメックス|AMEX|American Express|FHR|一休|楽天トラベル|じゃらん|agoda|エクスペディア|Expedia|Booking|Hotels\.com|Trip\.com|公式サイト|予約媒体|予約サイト|予約元/i;
 const FILL_EN_MONTH = /(January|February|March|April|May|June|July|August|September|October|November|December)/i;
 const FILL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -30,8 +28,7 @@ const FILL_WD = ['日', '月', '火', '水', '木', '金', '土'];
  * ★文の途中（「同特典では【16時】まで…」）は名前になりません。
  *   助詞で終わっていたら使いません。
  */
-function fillHead(body, mark) {
-  const at = body.indexOf(mark);
+function fillHead(body, at) {
   if (at < 0) return '';
   const lineAt = body.lastIndexOf('\n', at) + 1;
   let head = body.slice(lineAt, at)
@@ -49,12 +46,63 @@ function fillHead(body, mark) {
   return head;
 }
 
-/** 【　】の中の見本から、どんな入力にするかを決めます */
-function fillKind(sample) {
+/**
+ * その【　】の**うしろ**にある短い言葉（単位）を取り出します。
+ * 「【〇】泊」「【〇】名」のように、単位がうしろに来ることが多いためです。
+ */
+function fillTail(body, end) {
+  if (end < 0) return '';
+  const rest = body.slice(end);
+  /* ★**同じ行の中だけ**を見ます。\s は改行も通してしまうので、
+   *   「ご滞在　【…】」の次の行が「人数」だと、うしろの言葉を「人」と
+   *   読み違えて、滞在のらんを人数あつかいしかけていました（2026-11-20）。 */
+  const m = rest.match(/^[^\S\n]*(泊|名様|名|人|時間|時|分|円)/);
+  return m ? m[1] : '';
+}
+
+/** その【　】が入っている行ぜんぶ（何のらんか分かるように見せます） */
+function fillLine(body, at) {
+  if (at < 0) return '';
+  const a = body.lastIndexOf('\n', at) + 1;
+  let b = body.indexOf('\n', at);
+  if (b < 0) b = body.length;
+  return body.slice(a, b).replace(/[\s\u3000]+/g, ' ').trim();
+}
+
+/**
+ * どんな入力にするかを決めます。
+ *
+ * ★**前の言葉（head）→ うしろの単位（tail）→ 見本**、の順に見ます。
+ *   見本が「〇月〇日（〇）」のような伏せ字だと、見本だけでは分かりません
+ *   （2026-11-20、ko-dai さんのテンプレがそうでした）。
+ */
+function fillKind(sample, head, tail) {
   const s = String(sample || '');
+  const h = String(head || '');
+  // ① 前の言葉で決まるもの
+  if (/予約媒体|予約サイト|媒体|窓口|予約元/.test(h)) return 'site';
+  if (/宿泊日程|ご滞在|滞在日程/.test(h)) {
+    return (/[〜~–—]/.test(s) || /泊|night/i.test(s)) ? 'stay' : 'date';
+  }
+  if (/チェックイン|チェックアウト|日程|日付|宿泊日|来店日|ご来店/.test(h)) return 'date';
+  if (/到着|出発|時刻|時間/.test(h)) return 'time';
+  if (/人数|名様|大人|お子様/.test(h)) return 'num';
+  if (/泊数/.test(h)) return 'num';
+  if (/電話/.test(h)) return 'tel';
+  if (/予約番号|confirmation/i.test(h)) return 'text';
+  // ② うしろの単位で決まるもの（「【〇】泊」「【〇】名」）
+  if (/泊|名様|名|人/.test(tail || '')) return 'num';
+  if (/時|分/.test(tail || '')) return 'time';
+  // ③ 見本で決める
   if (FILL_SITE_WORDS.test(s)) return 'site';
   // 「11月15日（土）〜11月16日（日）／1泊」「15–16 November 2026 (1 night)」
   if (/[〜~–—]/.test(s) && /泊|night/i.test(s)) return 'stay';
+  // ★伏せ字も見分けます（「〇月〇日（〇）」「〇〇：〇〇」）
+  const MASK = '[0-9０-９〇○◯◯＊*xX×]';
+  if (new RegExp(MASK + '+\\s*月\\s*' + MASK + '+\\s*日').test(s)) return 'date';
+  if (new RegExp(MASK + '+\\s*[:：]\\s*' + MASK + '+').test(s)) return 'time';
+  if (new RegExp('^' + MASK + '+\\s*(名|名様|人)').test(s)) return 'num';
+  if (new RegExp('^' + MASK + '+\\s*泊').test(s)) return 'num';
   const hasDate = /\d+月\s*\d+日/.test(s) || (FILL_EN_MONTH.test(s) && /\d/.test(s));
   const hasTime = /\d{1,2}\s*[:：]\s*\d{2}|\d{1,2}\s*時/.test(s) || /\d\s*(a\.?m\.?|p\.?m\.?)/i.test(s);
   if (hasDate && hasTime) return 'datetime';
@@ -82,6 +130,13 @@ function fillLinkEn(dateSample, staySample) {
   if (days[0] === d) return 'in';
   if (days[1] === d) return 'out';
   return null;
+}
+
+/** 中身が伏せ字（〇〇）か空っぽなら true。そのままでは何のらんか分かりません */
+function fillIsMask(sample) {
+  const bare = String(sample || '')
+    .replace(/[\s\u3000〇○◯＊*×xX0-9０-９:：（）()月日年\-]/g, '');
+  return !bare;
 }
 
 /** 見本が日本語なら true（出す形をそろえるため） */
@@ -185,6 +240,8 @@ function fillToday() {
  */
 function fillTimeOf(sample) {
   const s = String(sample || '');
+  // ★伏せ字（〇〇：〇〇）からは取れません
+  if (/[〇○◯＊*×]/.test(s)) return null;
   let m = s.match(/(\d{1,2})\s*[:：]\s*(\d{2})\s*(a\.?m\.?|p\.?m\.?)/i);
   if (m) {
     let h = Number(m[1]) % 12;
@@ -214,17 +271,36 @@ function openFill(i, where) {
   const t = S.tpl[i];
   if (!t) return;
   const body = String(t[2] || '');
-  const marks = body.match(/【[^】]*】/g) || [];
-  if (!marks.length) { fillInsert(body, where); return; }
+  /* ★**場所ごと**に見ます。
+   *   前は同じ文字の【　】をまとめていたので、テンプレが伏せ字のとき
+   *   （予約番号も予約媒体も【　】、泊数も人数も【〇】）**片方が消えて**いました
+   *   （2026-11-20、ko-dai さんのテンプレで起きました）。 */
+  const occ = [];
+  const re = /【[^】]*】/g;
+  let mm;
+  while ((mm = re.exec(body))) {
+    const mark = mm[0];
+    occ.push({ at: mm.index, end: mm.index + mark.length, mark,
+               sample: mark.slice(1, -1),
+               head: fillHead(body, mm.index),
+               tail: fillTail(body, mm.index + mark.length),
+               line: fillLine(body, mm.index) });
+  }
+  if (!occ.length) { fillInsert(body, where); return; }
 
-  // 同じ見本が2回出てきたら、入力らんは1つにします（予約番号など）
-  const uniq = [];
-  marks.forEach((m) => { if (uniq.indexOf(m) < 0) uniq.push(m); });
-
-  const items = uniq.map((m) => {
-    const sample = m.slice(1, -1);
-    return { mark: m, sample, kind: fillKind(sample), ja: fillIsJa(sample),
-             head: fillHead(body, m) };
+  /* ★同じらんにまとめてよいのは、**中身が書いてある**とき
+   *   （「ABC12345」「酒井 皓大」など、同じ値が2か所に出るもの）。
+   *   伏せ字や空っぽは、まわりの言葉がちがえば別のらんです。 */
+  const items = [];
+  occ.forEach((o) => {
+    const plain = !fillIsMask(o.sample);
+    const key = plain ? o.mark : (o.mark + '｜' + o.head + '｜' + o.tail);
+    const had = items.find((x) => x.key === key);
+    if (had) { had.where.push(o); return; }
+    items.push({ key, where: [o], mark: o.mark, sample: o.sample,
+                 head: o.head, tail: o.tail, line: o.line,
+                 kind: fillKind(o.sample, o.head, o.tail),
+                 ja: fillIsJa(o.sample) || fillIsJa(o.head) || fillIsJa(body) });
   });
   // ★滞在に含まれている日付は、入力らんを出しません。
   //   「チェックイン」を2回選ばせることになり、食い違いのもとです
@@ -257,7 +333,13 @@ function fillField(it, n) {
   const lab = fillLabel(it);
   const id = 'f' + n;
   const head = '<label class="lbl" for="' + id + '">' + esc(lab) + '</label>';
-  const note = '<p class="muted small fill__s">見本：' + esc(it.sample) + '</p>';
+  /* ★見本だけでは、何のらんか分からないことがあります
+   *   （テンプレが「〇月〇日（〇）」のような伏せ字のとき。2026-11-20）。
+   *   **その行まるごと**を出せば、ひと目で分かります。 */
+  const line = it.line && it.line.length > 1
+    ? '<p class="muted small fill__s">この行：' + esc(it.line.slice(0, 70)) + '</p>'
+    : (it.sample ? '<p class="muted small fill__s">見本：' + esc(it.sample) + '</p>' : '');
+  const note = line;
   let input = '';
   if (it.kind === 'site') {
     input = '<select id="' + id + '" data-n="' + n + '">'
@@ -286,10 +368,14 @@ function fillField(it, n) {
       + (fillTimeOf(it.sample) || '18:00') + '">';
   } else if (it.kind === 'num') {
     const m = it.sample.match(/\d+/);
+    /* ★横に出す単位は、まず**テンプレのうしろの言葉**（「【〇】泊」の「泊」）。
+     *   見本をそのまま単位にすると、見本が伏せ字のとき「〇」と出てしまい、
+     *   何の数なのか分かりませんでした（2026-11-20 ko-dai さんの指摘）。 */
+    const u = it.tail || (fillIsMask(it.sample) ? '' : it.sample.replace(/^\s*\d+\s*/, ''));
     input = '<div class="row fill__row">'
       + '<input type="number" id="' + id + '" data-n="' + n + '" min="1" max="99" inputmode="numeric" value="'
       + (m ? m[0] : '2') + '">'
-      + '<span class="fill__u">' + esc(it.sample.replace(/^\s*\d+\s*/, '') || '名') + '</span></div>';
+      + (u ? '<span class="fill__u">' + esc(u) + '</span>' : '') + '</div>';
   } else {
     input = '<input type="' + (it.kind === 'tel' ? 'tel' : 'text') + '" id="' + id
       + '" data-n="' + n + '" placeholder="' + esc(it.sample) + '">';
@@ -317,6 +403,10 @@ function fillLabel(it) {
   if (it.kind === 'stay') return (it.head || 'ご滞在') + '（チェックインと泊数）';
   // ★テンプレの手前に書いてある名前があれば、それがいちばん分かりやすい
   if (it.head) return it.head;
+  // ★手前に無くても、うしろの単位で分かります（「【〇】泊」→ 泊数）
+  if (it.tail === '泊') return '泊数';
+  if (/名|人/.test(it.tail || '')) return '人数';
+  if (/時|分/.test(it.tail || '')) return '時刻';
   if (/予約番号|confirmation/i.test(s)) return '予約番号';
   if (/到着|arrive/i.test(s)) return '到着のころ';
   if (/電話|phone|tel/i.test(s)) return '電話番号';
@@ -326,6 +416,10 @@ function fillLabel(it) {
   if (it.kind === 'time') return '時刻';
   if (/部屋|room/i.test(s)) return 'お部屋';
   if (/朝食|breakfast/i.test(s)) return '朝食';
+  // ★伏せ字（〇〇）や空っぽを名前にしても分かりません。
+  //   そのときは「この行」のほうを見てもらいます
+  const bare = s.replace(/[\s\u3000〇○◯＊*×xX0-9０-９:：（）()月日年]/g, '');
+  if (!bare) return 'ここに入れるもの';
   return s.length > 14 ? s.slice(0, 14) + '…' : s;
 }
 
@@ -348,44 +442,58 @@ function fillPreview() {
 }
 
 /** 入れたものから、テンプレの文を作ります */
-function fillBuild() {
-  const t = S.tpl[S.fill.i];
-  let body = String(t[2] || '');
-  S.fill.items.forEach((it, n) => {
-    if (it.link) {
-      // 滞在から割り出します（チェックインか、チェックアウトか）
-      const st = S.fill.items[it.link.n];
-      const d = $('#f' + it.link.n);
-      const nights = Number($('#f' + it.link.n + 'n').value) || 1;
-      const iso = it.link.part === 'out' ? fillAddDays(d.value, nights) : d.value;
-      const v2 = fillDateIn(it.sample, iso, st.ja);
-      if (v2) body = body.split(it.mark).join(v2);
-      return;
-    }
-    const el = $('#f' + n);
-    let v = '';
-    if (it.kind === 'site') {
-      const other = $('#f' + n + 'o');
-      v = el.value || (other ? other.value.trim() : '');
-    } else if (it.kind === 'stay') {
-      v = fillStayText(el.value, Number($('#f' + n + 'n').value) || 1, it.ja);
-    } else if (it.kind === 'datetime') {
-      // ★見本の中の日付と時刻だけを入れ替えます（まわりの文は残します）
-      v = fillTimeIn(fillDateIn(it.sample, el.value, it.ja), $('#f' + n + 't').value, it.ja);
-    } else if (it.kind === 'date') {
-      v = fillDateIn(it.sample, el.value, it.ja);
-    } else if (it.kind === 'time') {
-      v = fillTimeIn(it.sample, el.value, it.ja);
-    } else if (it.kind === 'num') {
-      v = el.value ? fillNumText(it.sample, el.value) : '';
-    } else {
-      v = el.value.trim();
-    }
-    // ★空のままなら【　】を残します。消すと、埋め忘れに気づけません
-    if (v) body = body.split(it.mark).join(v);
-  });
-  return body;
+/** らん1つぶんの、入れる文字を作ります */
+function fillValueOf(it, n) {
+  if (it.link) {
+    // 滞在から割り出します（チェックインか、チェックアウトか）
+    const st = S.fill.items[it.link.n];
+    const d = $('#f' + it.link.n);
+    const nights = Number($('#f' + it.link.n + 'n').value) || 1;
+    const iso = it.link.part === 'out' ? fillAddDays(d.value, nights) : d.value;
+    return fillDateIn(it.sample, iso, st.ja);
+  }
+  const el = $('#f' + n);
+  if (!el) return '';
+  if (it.kind === 'site') {
+    const other = $('#f' + n + 'o');
+    return el.value || (other ? other.value.trim() : '');
+  }
+  if (it.kind === 'stay') {
+    return fillStayText(el.value, Number($('#f' + n + 'n').value) || 1, it.ja);
+  }
+  if (it.kind === 'datetime') {
+    // ★見本の中の日付と時刻だけを入れ替えます（まわりの文は残します）
+    return fillTimeIn(fillDateIn(it.sample, el.value, it.ja), $('#f' + n + 't').value, it.ja);
+  }
+  if (it.kind === 'date') return fillDateIn(it.sample, el.value, it.ja);
+  if (it.kind === 'time') return fillTimeIn(it.sample, el.value, it.ja);
+  if (it.kind === 'num') return el.value ? fillNumText(it.sample, el.value) : '';
+  return el.value.trim();
 }
+
+/**
+ * 入れたものから、テンプレの文を作ります。
+ *
+ * ★**場所を指して**入れ替えます。文字で探して置き換えると、
+ *   同じ伏せ字（【〇】）が別の意味で使われているときに、
+ *   関係ないところまで書き換えてしまいます（2026-11-20）。
+ * ★空のままなら【　】を残します。消すと、埋め忘れに気づけません。
+ */
+function fillBuild() {
+  const body = String(S.tpl[S.fill.i][2] || '');
+  const puts = [];
+  S.fill.items.forEach((it, n) => {
+    const v = fillValueOf(it, n);
+    if (!v) return;
+    it.where.forEach((o) => puts.push({ at: o.at, end: o.end, v }));
+  });
+  // うしろから入れます（前から入れると、場所がずれます）
+  puts.sort((a, b) => b.at - a.at);
+  let out = body;
+  puts.forEach((p2) => { out = out.slice(0, p2.at) + p2.v + out.slice(p2.end); });
+  return out;
+}
+
 
 /** 本文に差し込みます */
 function fillInsert(body, where) {

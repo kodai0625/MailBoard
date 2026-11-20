@@ -357,6 +357,11 @@ body.is-modal { overflow: hidden; }
 .fill__row input[type="date"], .fill__row input[type="time"] { flex: 1; min-width: 0; }
 .fill__u { flex: 0 0 auto; color: var(--text-sub); font-size: 14px; }
 .fill__other { margin-top: 7px; }
+/* ★スマホだと、題名と2つのボタンが1行に収まらず「入れる」だけが
+   次の行に落ちていました（2026-11-20）。縮めるのは題名のほうです */
+#fill .sheet__hd { flex-wrap: nowrap; }
+#fill .sheet__hd .pill { flex: 0 0 auto; white-space: nowrap; }
+#fill .sheet__t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 配信停止のお知らせ */
 .unsub { margin: 9px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--text);
