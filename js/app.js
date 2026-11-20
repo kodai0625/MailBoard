@@ -3045,7 +3045,7 @@ function bindEvents() {
     const sel = e.target.closest('select[data-n]');
     if (!sel) return;
     const other = $('#f' + sel.dataset.n + 'o');
-    if (other) other.hidden = !!sel.value;
+    if (other) other.hidden = sel.value !== FILL_OWN;
   });
 
   on('#pushOn', 'click', pushTurnOn);

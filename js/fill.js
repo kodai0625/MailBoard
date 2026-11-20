@@ -10,6 +10,8 @@
  * ========================================================== */
 
 /** 予約の窓口（ko-dai さんの指定、2026-11-20）。ここに無ければ自分で打てます */
+/** 「（自分で打つ）」の印。空っぽ（＝まだ選んでいない）と区別するためです */
+const FILL_OWN = '__own__';
 const FILL_SITES = [
   'agoda', 'Expedia', 'American Express Travel', '楽天トラベル', 'Trip.com',
 ];
@@ -464,10 +466,14 @@ function fillField(it, n) {
   const note = line;
   let input = '';
   if (it.kind === 'site') {
+    /* ★はじめは**選んでいない**状態にします。
+     *   いちばん上が選ばれていると、触らなかったときに agoda が黙って入り、
+     *   ちがう窓口を書いたまま送ってしまいます（2026-11-20）。 */
     input = '<select id="' + id + '" data-n="' + n + '">'
+      + '<option value="">（選んでください）</option>'
       + FILL_SITES.map((v) => '<option' + (it.sample.indexOf(v) >= 0 ? ' selected' : '') + '>'
           + esc(v) + '</option>').join('')
-      + '<option value="">（自分で打つ）</option></select>'
+      + '<option value="' + FILL_OWN + '">（自分で打つ）</option></select>'
       + '<input class="fill__other" id="' + id + 'o" data-n="' + n + '" hidden placeholder="窓口の名前">';
   } else if (it.kind === 'stay') {
     input = '<div class="row fill__row">'
@@ -594,8 +600,9 @@ function fillValueOf(it, n) {
   const el = $('#f' + n);
   if (!el) return '';
   if (it.kind === 'site') {
+    if (el.value !== FILL_OWN) return el.value;      // 空なら【　】が残ります
     const other = $('#f' + n + 'o');
-    return el.value || (other ? other.value.trim() : '');
+    return other ? other.value.trim() : '';
   }
   if (it.kind === 'stay') {
     return fillStayText(el.value, Number($('#f' + n + 'n').value) || 1, it.ja);
