@@ -28,6 +28,16 @@ const S = {
   inbox: {},          // 受け口の id → 受信トレイの実数
   query: {},          // 受け口の id → 読み込む範囲
   ver: {},            // 受け口の id → 受け口のコードの版の印
+  /* 送信済み。★索引（S.rows）には入れません。開いたときだけ取りに行きます。
+   *   混ぜると、受信トレイの通数・未読・カテゴリーが全部おかしくなります */
+  sent: {
+    addr: '',         // どの箱の送信ぶんを見ているか（'' は全部）
+    rows: [],         // 取ってきたぶん（新しい順）
+    by: new Map(),    // 見出し → 行（rowByKey から引くため）
+    next: {},         // 受け口の id → 続きの印（'' なら終わり）
+    loading: false,
+    err: '',
+  },
   seBy: 'domain',     // 差出人の一覧の見かた（domain / addr）
   seFind: '',
   seShow: {},         // 組ごとに、いくつまで出しているか
@@ -354,7 +364,10 @@ function rowByKey(key) {
   for (let i = 0; i < S.rows.length; i++) {
     if (Rules.keyOf(S.rows[i]) === key) return S.rows[i];
   }
-  return null;
+  /* ★送信済みは索引に入れていません（見るときだけ取りに行きます）。
+   *   ここで拾えるようにしておくと、本文・やり取り・返信が
+   *   受信のメールとまったく同じ道で動きます（2026-11-21）。 */
+  return S.sent.by.get(key) || null;
 }
 
 /* ============================================================
@@ -813,8 +826,13 @@ async function openMail(key) {
   const k = CAT_BY_ID[S.cat.get(key)] || CAT_BY_ID.other;
   const why = Rules.of(row).why;
 
+  /* ★送信済みから開いたときは、**宛先**を出します。
+   *   差出人はいつも自分なので、出しても何も分かりません（2026-11-21）。 */
+  const isSent = S.sent.by.has(key);
   $('#dSubj').textContent = row[F.SUBJ] || '（件名なし）';
-  $('#dFrom').textContent = (row[F.NAME] || '') + ' <' + row[F.FROM] + '>';
+  $('#dFrom').textContent = isSent
+    ? ('宛先： ' + (String(row[F.TO] || '').trim() || '（宛先なし）'))
+    : ((row[F.NAME] || '') + ' <' + row[F.FROM] + '>');
   $('#dDate').textContent = fmtFull(row[F.DATE]);
   $('#dCat').innerHTML = '<span class="tag tag--' + k.id + '">' + esc(k.name) + '</span>'
     + '<span class="why">' + esc(why) + '</span>';
@@ -2091,6 +2109,122 @@ function tallySenders() {
   return out;
 }
 
+/* ============================================================
+ *  送信済み（純正アプリの「送信済み」と同じもの）
+ *
+ *  ★**索引（端末の中の一覧）には入れていません。**開いたときだけ
+ *    受け口に聞きに行きます。送ったメールは新着の知らせも仕分けも
+ *    要らず、索引に混ぜると受信トレイの通数・未読・カテゴリーが
+ *    全部おかしくなるためです（2026-11-21）。
+ *
+ *  ★本文はいつもどおり、開いたときだけ取りに行きます。
+ *    どこにも複製しません。
+ * ========================================================== */
+
+function openSent() {
+  if (S.demo) { toast('見本なので使えません'); return; }
+  if (!Api.live().length) { toast('先に受け口をつないでください', true); return; }
+  $('#sent').hidden = false;
+  document.body.classList.add('is-modal');
+  // ★いま見ている箱のぶんから出します（受信と行き来しても迷いません）
+  sentLoad(S.folder || '', true);
+}
+
+function closeSent() {
+  $('#sent').hidden = true;
+  if ($('#detail').hidden) document.body.classList.remove('is-modal');
+}
+
+/**
+ * 取りに行きます。
+ *   addr … 箱（自分のアドレス）。'' なら全部
+ *   fresh … 始めから取り直すか
+ */
+async function sentLoad(addr, fresh) {
+  const st = S.sent;
+  if (st.loading) return;
+  if (fresh) {
+    st.addr = addr;
+    st.rows = [];
+    st.by = new Map();
+    st.next = {};
+    st.err = '';
+    Api.live().forEach((src) => { st.next[src] = ''; });   // '' ＝ まだ1回も聞いていない
+  }
+  st.loading = true;
+  renderSent();
+  try {
+    const live = Api.live().filter((src) => st.next[src] !== null);  // null ＝ もう終わり
+    const got = await Promise.all(live.map(async (src) => {
+      try {
+        const d = await Api.sent(src, st.addr, st.next[src] || '', 30);
+        st.next[src] = d.next || null;
+        return (d.rows || []).map((r) => { const x = r.slice(); x[F.SRC] = src; return x; });
+      } catch (e) {
+        st.err = String(e.message || e);
+        st.next[src] = null;
+        return [];
+      }
+    }));
+    got.forEach((rows) => rows.forEach((r) => {
+      const k = Rules.keyOf(r);
+      if (st.by.has(k)) return;              // 二重に出さない
+      st.by.set(k, r);
+      st.rows.push(r);
+    }));
+    st.rows.sort((a, b) => Number(b[F.DATE]) - Number(a[F.DATE]));
+  } finally {
+    st.loading = false;
+    renderSent();
+  }
+}
+
+function renderSent() {
+  const st = S.sent;
+  const boxes = $('#stBoxes');
+  if (boxes) {
+    const chip = (a, label, on) => '<button class="chip' + (on ? ' is-on' : '') + '"'
+      + ' data-sbox="' + esc(a) + '">' + esc(label) + '</button>';
+    boxes.innerHTML = chip('', '全部', !st.addr)
+      + S.myAddrs.map((a) => chip(a, folderName(a), st.addr === a)).join('');
+  }
+  const note = $('#stNote');
+  if (note) {
+    note.textContent = st.err ? st.err
+      : st.loading ? '読み込んでいます…'
+      : st.rows.length ? st.rows.length.toLocaleString() + '通'
+      : '送ったメールはありません';
+    note.classList.toggle('bad', !!st.err);
+  }
+  const ul = $('#stList');
+  if (ul) {
+    ul.innerHTML = st.rows.length
+      ? st.rows.map((r) => {
+          const k = Rules.keyOf(r);
+          // ★送った相手を出します。差出人はいつも自分なので、出しても分かりません
+          const to = String(r[F.TO] || '').trim() || '（宛先なし）';
+          return '<li class="mail" data-sent="' + esc(k) + '">'
+            + '<span class="mail__dot"></span>'
+            + '<div class="mail__b">'
+            +   '<div class="mail__top">'
+            +     '<span class="mail__from">' + esc(to) + '</span>'
+            +     '<span class="mail__date">' + fmtDate(r[F.DATE]) + '</span>'
+            +   '</div>'
+            +   '<div class="mail__subj">' + esc(r[F.SUBJ] || '（件名なし）') + '</div>'
+            +   '<div class="mail__snip">' + esc(r[F.SNIP]) + '</div>'
+            + '</div></li>';
+        }).join('')
+      : (st.loading ? '' : '<li class="empty">ここには何もありません</li>');
+  }
+  const more = $('#stMore');
+  if (more) {
+    const left = Api.live().some((src) => st.next[src] !== null);
+    more.hidden = !left || !st.rows.length;
+    more.textContent = st.loading ? '読み込んでいます…' : 'もっと見る';
+    more.disabled = st.loading;
+  }
+}
+
 function openSenders() {
   S.seFind = '';
   S.seShow = {};
@@ -2814,6 +2948,19 @@ function bindEvents() {
   });
 
   on('#catsBtn', 'click', () => $('#main').classList.toggle('show-cats'));
+
+  on('#sentBtn', 'click', openSent);
+  on('#stClose', 'click', closeSent);
+  on('#stReload', 'click', () => sentLoad(S.sent.addr, true));
+  on('#stBoxes', 'click', (e) => {
+    const b = e.target.closest('[data-sbox]');
+    if (b) sentLoad(b.dataset.sbox, true);
+  });
+  on('#stMore', 'click', () => sentLoad(S.sent.addr, false));
+  on('#stList', 'click', (e) => {
+    const li = e.target.closest('[data-sent]');
+    if (li) openMail(li.dataset.sent);
+  });
 
   on('#sendersBtn', 'click', openSenders);
   on('#seClose', 'click', () => {

@@ -350,6 +350,16 @@ body.is-modal { overflow: hidden; }
   .airow .pill { flex: 1 1 0; min-width: 0; white-space: normal; }
 }
 
+/* ---- 送信済み ---- */
+/* ★.chip は**上の暗い帯**に置くための色です（白い字・白いふち）。
+   明るい面にそのまま置くと、ほとんど見えませんでした（2026-11-21）。 */
+#stBoxes { padding: 2px 0 10px; }
+#stBoxes .chip { border-color: var(--line); color: var(--text-sub); background: var(--surface); }
+#stBoxes .chip.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+#stNote { margin: 0 2px 8px; }
+#stNote.bad { color: #b00; }
+#stMore { margin-top: 10px; }
+
 /* ---- テンプレの穴うめ ---- */
 /* ★返信・新しく書く の**上**に出します。
    同じ重なりだと、あとに書いてあるほう（返信）が勝って、下に隠れます

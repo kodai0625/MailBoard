@@ -135,6 +135,8 @@ const Api = {
   pushDel(src, endpoint) { return this.post(src, 'pushDel', { endpoint }); },
   pull(src, offset, limit) { return this.post(src, 'pull', { offset, limit }); },
   body(src, id) { return this.post(src, 'body', { id }); },
+  // 送信済み。★索引には入れず、見るときだけ取りに行きます
+  sent(src, addr, page, max) { return this.post(src, 'sent', { addr, page, max }); },
   read(src, ids, read) { return this.post(src, 'read', { ids, read }); },
   unsub(src, id) { return this.post(src, 'unsub', { id }); },
   star(src, ids, on) { return this.post(src, 'star', { ids, on }); },
