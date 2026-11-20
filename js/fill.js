@@ -35,6 +35,22 @@ function fillHead(body, at) {
     .replace(/[\s\u3000：:・．.]+$/, '')
     .replace(/^[\s\u3000]+/, '')
     .replace(/^[0-9]+[．.、]\s*/, '');
+  /* ★手前に**別の【　】**があると、それごと名前にしていました
+   *   （「宿泊日程　：【〇月〇日（〇）】 〜」が、そのまま名前に。2026-11-20）。
+   *   うしろ側を使い、何も残らなければ**行のあたまの言葉**にもどします。 */
+  const close = head.lastIndexOf('】');
+  if (close >= 0) {
+    const after = head.slice(close + 1)
+      .replace(/^[\s\u3000〜~–—、,：:]+/, '').replace(/[\s\u3000：:・．.]+$/, '');
+    const open = head.indexOf('【');
+    const lead = open > 0 ? head.slice(0, open).replace(/[\s\u3000：:・．.]+$/, '') : '';
+    /* ★うしろ側が**文の途中**のことがあります
+     *   （「【11月15日（土）】から宿泊を予約しております、【酒井 皓大】」）。
+     *   句読点が入っていたり、助詞ではじまるものは名前になりません。 */
+    const midSentence = /[、，。．.!?！？]/.test(after)
+      || /^(から|まで|より|を|に|で|と|へ|も|は|が|の)/.test(after);
+    head = (after && !midSentence) ? after : lead;
+  }
   if (!head) return '';
   // 助詞で終わっていたら、それは文の途中です（名前になりません）
   if (/(は|を|が|に|へ|と|の|も|で|から|まで|より)$/.test(head)) return '';
@@ -61,6 +77,19 @@ function fillTail(body, end) {
 }
 
 /** その【　】が入っている行ぜんぶ（何のらんか分かるように見せます） */
+/**
+ * 【　】のうしろ、**同じ行の残り**です（「を通じて」「経由で」など）。
+ *
+ * ★ko-dai さんのテンプレは「【　】 を通じて」の形で、**手前に言葉がありません**。
+ *   手前だけ見ていたので、予約媒体のらんだと気づけませんでした（2026-11-20）。
+ */
+function fillAfter(body, end) {
+  if (end < 0) return '';
+  let nl = body.indexOf('\n', end);
+  if (nl < 0) nl = body.length;
+  return body.slice(end, nl).replace(/^[\s\u3000]+/, '').replace(/[\s\u3000]+$/, '');
+}
+
 function fillLine(body, at) {
   if (at < 0) return '';
   const a = body.lastIndexOf('\n', at) + 1;
@@ -76,11 +105,21 @@ function fillLine(body, at) {
  *   見本が「〇月〇日（〇）」のような伏せ字だと、見本だけでは分かりません
  *   （2026-11-20、ko-dai さんのテンプレがそうでした）。
  */
-function fillKind(sample, head, tail) {
+function fillKind(sample, head, tail, after) {
   const s = String(sample || '');
   const h = String(head || '');
-  // ① 前の言葉で決まるもの
+  /* ① うしろの単位。**いちばん確かな手がかり**なので先に見ます。
+   *   「宿泊日程　：【日付】 〜 【日付】 【〇】泊」では、泊数の手前の言葉も
+   *   「宿泊日程」になるため、前の言葉から決めると**日付のらんになって**いました
+   *   （2026-11-20）。 */
+  if (/泊|名様|名|人/.test(tail || '')) return 'num';
+  if (/時|分/.test(tail || '')) return 'time';
+  // ② 前の言葉で決まるもの
   if (/予約媒体|予約サイト|媒体|窓口|予約元/.test(h)) return 'site';
+  /* ★うしろの言葉でも決まります。「【　】 を通じて」のように、
+   *   **手前に何も書いていない**テンプレがあります（2026-11-20） */
+  if (/^(を通じて|を通して|を通し|経由|より予約|から予約|で予約|にて予約|booked (through|via)|through|via)/i
+      .test(String(after || ''))) return 'site';
   if (/宿泊日程|ご滞在|滞在日程/.test(h)) {
     return (/[〜~–—]/.test(s) || /泊|night/i.test(s)) ? 'stay' : 'date';
   }
@@ -90,9 +129,6 @@ function fillKind(sample, head, tail) {
   if (/泊数/.test(h)) return 'num';
   if (/電話/.test(h)) return 'tel';
   if (/予約番号|confirmation/i.test(h)) return 'text';
-  // ② うしろの単位で決まるもの（「【〇】泊」「【〇】名」）
-  if (/泊|名様|名|人/.test(tail || '')) return 'num';
-  if (/時|分/.test(tail || '')) return 'time';
   // ③ 見本で決める
   if (FILL_SITE_WORDS.test(s)) return 'site';
   // 「11月15日（土）〜11月16日（日）／1泊」「15–16 November 2026 (1 night)」
@@ -282,8 +318,10 @@ function openFill(i, where) {
     const mark = mm[0];
     occ.push({ at: mm.index, end: mm.index + mark.length, mark,
                sample: mark.slice(1, -1),
+               lineAt: body.lastIndexOf('\n', mm.index) + 1,
                head: fillHead(body, mm.index),
                tail: fillTail(body, mm.index + mark.length),
+               after: fillAfter(body, mm.index + mark.length),
                line: fillLine(body, mm.index) });
   }
   if (!occ.length) { fillInsert(body, where); return; }
@@ -294,12 +332,12 @@ function openFill(i, where) {
   const items = [];
   occ.forEach((o) => {
     const plain = !fillIsMask(o.sample);
-    const key = plain ? o.mark : (o.mark + '｜' + o.head + '｜' + o.tail);
+    const key = plain ? o.mark : (o.mark + '｜' + o.head + '｜' + o.tail + '｜' + o.after);
     const had = items.find((x) => x.key === key);
     if (had) { had.where.push(o); return; }
     items.push({ key, where: [o], mark: o.mark, sample: o.sample,
-                 head: o.head, tail: o.tail, line: o.line,
-                 kind: fillKind(o.sample, o.head, o.tail),
+                 head: o.head, tail: o.tail, after: o.after, line: o.line,
+                 kind: fillKind(o.sample, o.head, o.tail, o.after),
                  ja: fillIsJa(o.sample) || fillIsJa(o.head) || fillIsJa(body) });
   });
   // ★滞在に含まれている日付は、入力らんを出しません。
@@ -318,6 +356,31 @@ function openFill(i, where) {
       if (part) it.link = { n: sn, part };
     });
   });
+  /* ★「宿泊日程　：【日付】 〜 【日付】 【〇】泊」の形。
+   *   **出る日は（入る日＋泊数）で決まります。**2回選ばせると食い違うので、
+   *   出る日のらんは出しません（ko-dai さんのテンプレ。2026-11-20）。
+   *   泊数が無いテンプレなら、らんは出したまま「入る日／出る日」と名前をつけます。 */
+  items.forEach((it, n) => {
+    if (it.kind !== 'date' || it.link) return;
+    const me = it.where[0];
+    let prev = -1;
+    items.forEach((x, xn) => {
+      if (xn === n || x.kind !== 'date' || x.link) return;
+      if (x.where[0].lineAt !== me.lineAt || x.where[0].at >= me.at) return;
+      prev = xn;
+    });
+    if (prev < 0) return;
+    // 2つの日付のあいだが「〜」でつながっていること
+    if (!/[〜~–—]|\bto\b/i.test(body.slice(items[prev].where[0].end, me.at))) return;
+    let nights = -1;
+    items.forEach((x, xn) => {
+      if (x.kind === 'num' && /泊|night/i.test(x.tail || '')
+          && x.where[0].lineAt === me.lineAt) nights = xn;
+    });
+    if (nights < 0) { items[prev].part = 'in'; it.part = 'out'; return; }
+    it.link = { n: prev, part: 'out', nightsN: nights };
+  });
+
   S.fill = { i, where, items };
 
   $('#fillTitle').textContent = String(t[1] || '埋める');
@@ -399,8 +462,20 @@ function fillNumText(sample, n) {
 /** らんの名前。見本から、それらしい言葉を選びます */
 function fillLabel(it) {
   const s = it.sample;
-  if (it.kind === 'site') return '予約した窓口';
+  /* ★テンプレに窓口のらんが2つあることがあります（「【　】を通じて」と「予約媒体：【　】」）。
+   *   同じ名前だと、どちらのことか分かりません。手前の言葉があれば、そちらを使います */
+  if (it.kind === 'site') return it.head || '予約した窓口';
   if (it.kind === 'stay') return (it.head || 'ご滞在') + '（チェックインと泊数）';
+  /* ★数のらんは、うしろの単位を名前にします。
+   *   手前の言葉が「宿泊日程」（同じ行の頭）になることがあるためです */
+  if (it.kind === 'num') {
+    if (it.head && !/日程|滞在|日付|チェック/.test(it.head)) return it.head;
+    if (it.tail === '泊') return '泊数';
+    if (/名|人/.test(it.tail || '')) return '人数';
+  }
+  // ★同じ行に日付が2つあるときは、どちらか分かるようにします
+  if (it.part === 'in') return (it.head || '日付') + '（入る日）';
+  if (it.part === 'out') return (it.head || '日付') + '（出る日）';
   // ★テンプレの手前に書いてある名前があれば、それがいちばん分かりやすい
   if (it.head) return it.head;
   // ★手前に無くても、うしろの単位で分かります（「【〇】泊」→ 泊数）
@@ -448,7 +523,10 @@ function fillValueOf(it, n) {
     // 滞在から割り出します（チェックインか、チェックアウトか）
     const st = S.fill.items[it.link.n];
     const d = $('#f' + it.link.n);
-    const nights = Number($('#f' + it.link.n + 'n').value) || 1;
+    if (!d || !d.value) return '';          // ★空なら【　】を残します
+    // 泊数は、滞在らんの中（…n）か、別の「泊数」のらん（nightsN）から
+    const nEl = it.link.nightsN != null ? $('#f' + it.link.nightsN) : $('#f' + it.link.n + 'n');
+    const nights = Number(nEl && nEl.value) || 1;
     const iso = it.link.part === 'out' ? fillAddDays(d.value, nights) : d.value;
     return fillDateIn(it.sample, iso, st.ja);
   }
@@ -461,12 +539,16 @@ function fillValueOf(it, n) {
   if (it.kind === 'stay') {
     return fillStayText(el.value, Number($('#f' + n + 'n').value) || 1, it.ja);
   }
+  /* ★空のままなら「空」を返します。
+   *   見本を返すと、fillBuild が【　】を外して入れ直すので、
+   *   **埋めていないのに埋めたように見えて**いました（2026-11-20）。 */
   if (it.kind === 'datetime') {
+    if (!el.value) return '';
     // ★見本の中の日付と時刻だけを入れ替えます（まわりの文は残します）
     return fillTimeIn(fillDateIn(it.sample, el.value, it.ja), $('#f' + n + 't').value, it.ja);
   }
-  if (it.kind === 'date') return fillDateIn(it.sample, el.value, it.ja);
-  if (it.kind === 'time') return fillTimeIn(it.sample, el.value, it.ja);
+  if (it.kind === 'date') return el.value ? fillDateIn(it.sample, el.value, it.ja) : '';
+  if (it.kind === 'time') return el.value ? fillTimeIn(it.sample, el.value, it.ja) : '';
   if (it.kind === 'num') return el.value ? fillNumText(it.sample, el.value) : '';
   return el.value.trim();
 }
