@@ -48,15 +48,31 @@ function fillHead(body, at) {
      *   （「【11月15日（土）】から宿泊を予約しております、【酒井 皓大】」）。
      *   句読点が入っていたり、助詞ではじまるものは名前になりません。 */
     const midSentence = /[、，。．.!?！？]/.test(after)
-      || /^(から|まで|より|を|に|で|と|へ|も|は|が|の)/.test(after);
+      || /^(から|まで|より|を|に|で|と|へ|も|は|が|の)/.test(after)
+      // ★記号だけ（「(」など）は名前になりません
+      || !/[0-9A-Za-z\u3040-\u30ff\u4e00-\u9fff]/.test(after);
     head = (after && !midSentence) ? after : lead;
   }
   if (!head) return '';
-  // 助詞で終わっていたら、それは文の途中です（名前になりません）
-  if (/(は|を|が|に|へ|と|の|も|で|から|まで|より)$/.test(head)) return '';
-  // 英語も同じ。「Hello. My name is」のような文の途中を名前にしないため
-  if (/\b(is|are|am|was|were|be|on|at|to|from|by|for|in|of|with|around|including|and|or|the|a|an)$/i
-      .test(head)) return '';
+  /* ★止め言葉は**はがして**みます。あきらめると名前が消えてしまうためです
+   *   （「Estimated arrival : around」→「Estimated arrival」。2026-11-20）。 */
+  const JA_STOP = /(は|を|が|に|へ|と|の|も|で|から|まで|より)$/;
+  /* ★前が空白か行あたまのときだけ、はがします。
+   *   `\b` だけだと「Check-in」の "in" まで取れて、日付のらんでなくなりました（2026-11-20）。
+   *   through / via は「Booked through」のように**意味がある**ので残します。 */
+  const EN_STOP =
+    /(^|\s)(is|are|am|was|were|be|on|at|to|from|by|for|in|of|with|around|including|and|or|the|a|an|dear)$/i;
+  /* ★はがすのは**英語だけ**です。日本語の助詞で終わっていたら、
+   *   それは本当に文の途中なので、名前にしません
+   *   （「同特典では【16時】まで…」の「同特典」を名前にしてしまいました。2026-11-20）。 */
+  for (let k = 0; k < 4; k++) {
+    const was = head;
+    head = head.replace(EN_STOP, '').replace(/[\s\u3000：:・．.,，、（(\[【]+$/, '');
+    if (head === was) break;
+  }
+  if (!head) return '';
+  // それでも助詞・前置詞で終わるなら、文の途中です（名前になりません）
+  if (JA_STOP.test(head) || EN_STOP.test(head)) return '';
   if (/[。．.!?！？]/.test(head)) return '';
   if (head.length > 24) return '';
   return head;
@@ -72,7 +88,9 @@ function fillTail(body, end) {
   /* ★**同じ行の中だけ**を見ます。\s は改行も通してしまうので、
    *   「ご滞在　【…】」の次の行が「人数」だと、うしろの言葉を「人」と
    *   読み違えて、滞在のらんを人数あつかいしかけていました（2026-11-20）。 */
-  const m = rest.match(/^[^\S\n]*(泊|名様|名|人|時間|時|分|円)/);
+  // ★英語のテンプレもあります（「(【　】 nights)」「【　】 adults」）
+  const m = rest.match(
+    /^[^\S\n]*(泊|名様|名|人|時間|時|分|円|nights?|adults?|guests?|people|persons?|pax)/i);
   return m ? m[1] : '';
 }
 
@@ -112,10 +130,14 @@ function fillKind(sample, head, tail, after) {
    *   「宿泊日程　：【日付】 〜 【日付】 【〇】泊」では、泊数の手前の言葉も
    *   「宿泊日程」になるため、前の言葉から決めると**日付のらんになって**いました
    *   （2026-11-20）。 */
-  if (/泊|名様|名|人/.test(tail || '')) return 'num';
+  if (/泊|名様|名|人|nights?|adults?|guests?|people|persons?|pax/i.test(tail || '')) return 'num';
   if (/時|分/.test(tail || '')) return 'time';
   // ② 前の言葉で決まるもの
   if (/予約媒体|予約サイト|媒体|窓口|予約元/.test(h)) return 'site';
+  /* ★英語のテンプレ。「Booked through :」「I booked my stay through」。
+   *   ★「Booking reference」を窓口にしないよう、through / via / with まで見ます */
+  if (/\b(booked|booking)\b[\s\S]*\b(through|via|with)\b/i.test(h)
+      || /\b(booked|booking)\s*$/i.test(h)) return 'site';
   /* ★うしろの言葉でも決まります。「【　】 を通じて」のように、
    *   **手前に何も書いていない**テンプレがあります（2026-11-20） */
   if (/^(を通じて|を通して|を通し|経由|より予約|から予約|で予約|にて予約|booked (through|via)|through|via)/i
@@ -124,10 +146,15 @@ function fillKind(sample, head, tail, after) {
     return (/[〜~–—]/.test(s) || /泊|night/i.test(s)) ? 'stay' : 'date';
   }
   if (/チェックイン|チェックアウト|日程|日付|宿泊日|来店日|ご来店/.test(h)) return 'date';
+  if (/\b(check-?in|check-?out|arrival date|departure date)\b/i.test(h)) return 'date';
   if (/到着|出発|時刻|時間/.test(h)) return 'time';
+  if (/\b(estimated arrival|arrival time|arriving|departure time)\b/i.test(h)) return 'time';
   if (/人数|名様|大人|お子様/.test(h)) return 'num';
+  if (/\b(guests?|adults?|people|persons?|pax|children|kids)\b/i.test(h)) return 'num';
   if (/泊数/.test(h)) return 'num';
+  if (/\bnights?\b/i.test(h)) return 'num';
   if (/電話/.test(h)) return 'tel';
+  if (/\b(phone|tel|mobile)\b/i.test(h)) return 'tel';
   if (/予約番号|confirmation/i.test(h)) return 'text';
   // ③ 見本で決める
   if (FILL_SITE_WORDS.test(s)) return 'site';
@@ -145,7 +172,8 @@ function fillKind(sample, head, tail, after) {
   if (hasDate) return 'date';
   if (hasTime) return 'time';
   if (/^\s*\d+\s*(名|名様|人|adults?|guests?|people)/i.test(s)) return 'num';
-  if (/電話|phone|tel/i.test(s)) return 'tel';
+  // ★「Hotel Name」の中の tel を電話と読んでいました（2026-11-20）
+  if (/電話/.test(s) || /\b(phone|tel|mobile)\b/i.test(s)) return 'tel';
   return 'text';
 }
 
@@ -235,6 +263,12 @@ function fillDateIn(sample, iso, ja) {
   if (jaD.test(sample)) return sample.replace(jaD, () => fillDateText(iso, true));
   const enD = /\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)(\s+\d{4})?/i;
   if (enD.test(sample)) return sample.replace(enD, () => fillDateText(iso, false));
+  /* ★「Month Day, Year」は**書き方の見本**です。そのとおりに返します
+   *   （「December 6, 2026」。2026-11-20、ko-dai さんの海外テンプレ） */
+  if (/month\s*day\s*,?\s*year/i.test(sample)) {
+    const [y2, m2, d2] = iso.split('-').map(Number);
+    return FILL_MONTHS[m2 - 1] + ' ' + d2 + ', ' + y2;
+  }
   return fillDateText(iso, ja);
 }
 
@@ -332,7 +366,11 @@ function openFill(i, where) {
   const items = [];
   occ.forEach((o) => {
     const plain = !fillIsMask(o.sample);
-    const key = plain ? o.mark : (o.mark + '｜' + o.head + '｜' + o.tail + '｜' + o.after);
+    /* ★中身が書いてある見本でも、**手前の言葉がちがえば別のらん**です。
+     *   「Check-in：【Month Day, Year】」と「Check-out：【Month Day, Year】」が
+     *   1つにまとまって、**入る日と出る日が同じ日付**になっていました（2026-11-20）。 */
+    const key = plain ? (o.mark + '｜' + o.head)
+                      : (o.mark + '｜' + o.head + '｜' + o.tail + '｜' + o.after);
     const had = items.find((x) => x.key === key);
     if (had) { had.where.push(o); return; }
     items.push({ key, where: [o], mark: o.mark, sample: o.sample,
@@ -380,6 +418,27 @@ function openFill(i, where) {
     if (nights < 0) { items[prev].part = 'in'; it.part = 'out'; return; }
     it.link = { n: prev, part: 'out', nightsN: nights };
   });
+
+  /* ★「Check-in：【日付】」と「Check-out：【日付】 (【　】 nights)」が
+   *   **別の行**にあるテンプレ（ko-dai さんの海外ぶん。2026-11-20）。
+   *   出る日は（入る日＋泊数）で決まるので、らんを出しません。 */
+  (function () {
+    const pick = (re) => {
+      let k = -1;
+      items.forEach((x, n) => { if (k < 0 && x.kind === 'date' && re.test(x.head || '')) k = n; });
+      return k;
+    };
+    const out = pick(/check-?out|チェックアウト|退室|出る日/i);
+    const inn = pick(/check-?in|チェックイン|入室|入る日/i);
+    if (out < 0 || inn < 0 || out === inn || items[out].link || items[inn].link) return;
+    let nights = -1;
+    items.forEach((x, n) => {
+      if (nights < 0 && x.kind === 'num'
+          && (/泊|nights?/i.test(x.tail || '') || /泊数|\bnights?\b/i.test(x.head || ''))) nights = n;
+    });
+    if (nights < 0) return;                 // 泊数が無いテンプレなら、らんは出したまま
+    items[out].link = { n: inn, part: 'out', nightsN: nights };
+  })();
 
   S.fill = { i, where, items };
 
@@ -469,9 +528,11 @@ function fillLabel(it) {
   /* ★数のらんは、うしろの単位を名前にします。
    *   手前の言葉が「宿泊日程」（同じ行の頭）になることがあるためです */
   if (it.kind === 'num') {
-    if (it.head && !/日程|滞在|日付|チェック/.test(it.head)) return it.head;
-    if (it.tail === '泊') return '泊数';
-    if (/名|人/.test(it.tail || '')) return '人数';
+    if (it.head && !/日程|滞在|日付|チェック|check-?in|check-?out|date|stay/i.test(it.head)) {
+      return it.head;
+    }
+    if (/泊|nights?/i.test(it.tail || '')) return '泊数';
+    if (/名|人|guests?|adults?|people/i.test(it.tail || '')) return '人数';
   }
   // ★同じ行に日付が2つあるときは、どちらか分かるようにします
   if (it.part === 'in') return (it.head || '日付') + '（入る日）';
@@ -484,7 +545,7 @@ function fillLabel(it) {
   if (/時|分/.test(it.tail || '')) return '時刻';
   if (/予約番号|confirmation/i.test(s)) return '予約番号';
   if (/到着|arrive/i.test(s)) return '到着のころ';
-  if (/電話|phone|tel/i.test(s)) return '電話番号';
+  if (/電話/.test(s) || /\b(phone|tel|mobile)\b/i.test(s)) return '電話番号';
   if (it.kind === 'num') return '人数';
   if (it.kind === 'datetime') return '日時';
   if (it.kind === 'date') return '日付';
