@@ -1627,7 +1627,15 @@ function saveSoon() {
   })();
 }
 
-async function syncNew(quiet) {
+/**
+ * 新着を取り込みます。
+ *
+ * ★`pre` に「先に頼んでおいた返事」を渡せます。起動のときは、受け口に
+ *   聞くのと同時に取り込みも頼むので、**往復が1回で済みます**
+ *   （前は「聞く」→「取り込む」の2往復で、受け口が眠っていると
+ *     そのぶん待ち時間が倍になりました。2026-11-20）。
+ */
+async function syncNew(quiet, pre) {
   const live = Api.live();
   if (!live.length) return;
   // ★索引を読み込んでいる最中は割り込みません。同じ受け口に
@@ -1641,7 +1649,7 @@ async function syncNew(quiet) {
     // ★受け口は**まとめて同時に**聞きます。1つずつ待つと、受け口の数だけ
     //   1〜3秒が足し算になります（受け口は別々の Google アカウントなので、
     //   同時に頼んでもぶつかりません）
-    const got = await Promise.all(live.map((src) =>
+    const got = pre || await Promise.all(live.map((src) =>
       Api.sync(src).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
@@ -2556,6 +2564,11 @@ async function boot() {
   try {
     S.busy = 'つないでいます…'; render();
     const aliases = [];
+    // ★**取り込みも、同じタイミングで頼んでおきます。**
+    //   受け口に聞き終わってから頼むと、往復が2回ぶん並びます。
+    //   Apps Script は眠っていると返事に数秒かかるので、そこが効きます
+    const syncP = Promise.all(live.map((src) =>
+      Api.sync(src).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
     // ★いちばんの受け口だけ full で聞きます。決まりごと・上書き・テンプレが
     //   一緒に返ってくるので、そのぶんの3往復が消えます
     const probes = await Promise.all(live.map((src) =>
@@ -2625,7 +2638,8 @@ async function boot() {
       render();
     }
 
-    await syncNew(true);
+    // ★先に頼んでおいた返事を渡します（もう返ってきているはずです）
+    await syncNew(true, await syncP);
     renderScanNote();
   } catch (e) {
     toast(String(e.message || e), true);

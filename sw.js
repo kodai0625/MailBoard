@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 28d41fc35f を版の印に
+ *  ★このファイルは 公開用を作る.py が 205b12fa8a を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '28d41fc35f';
+const VERSION = '205b12fa8a';
 const CACHE = 'mailboard-' + VERSION;
 
 /* 新しいこのファイルが届いたら、前のものを待たずにすぐ交代します */
@@ -147,21 +147,35 @@ function kvSet(key, val) {
   });
 }
 
-const PUSH_MAX = 5;          // 一度に出す通知の数（鳴りっぱなしを防ぎます）
+const PUSH_MAX = 8;          // 一度に出す通知の数（鳴りっぱなしを防ぎます）
+const WAIT_TAG = 'mailboard-new';
+const ICONS = { icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png' };
 
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
+    /* ★**先に1つ出してから**、件名を取りに行きます。
+     *
+     *   件名は受け口（Apps Script）に聞きに行きます。向こうが眠っていると
+     *   返事に数秒かかり、**その間に iOS が世話係を止めてしまうことがあります。**
+     *   先に出しておけば、少なくとも「来たこと」は必ず分かります
+     *   （2026-11-20、ko-dai さんの「通知が毎回来るわけではない」）。
+     *
+     *   件名が取れたら、この1つを消して、1通ずつ出し直します。
+     */
+    await self.registration.showNotification('新しいメール', Object.assign({
+      body: '件名を取りに行っています…', tag: WAIT_TAG, renotify: true,
+    }, ICONS));
+
     const srcs = (await kvGet('pushSrc')) || [];
     const got = await Promise.all(srcs.map((s) =>
       askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
     const live = got.filter((x) => x && x.d && x.d.n);
 
     if (!live.length) {
-      // 受け口に聞けなかったときでも、黙っているよりは知らせます
-      await self.registration.showNotification('新しいメール', {
-        body: '新着があります', tag: 'mailboard-new', renotify: true,
-        icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png',
-      });
+      // 受け口に聞けなかったとき。★消さずに、文だけ置き換えます
+      await self.registration.showNotification('新しいメール', Object.assign({
+        body: '新着があります', tag: WAIT_TAG, renotify: true,
+      }, ICONS));
       return;
     }
 
@@ -177,26 +191,35 @@ self.addEventListener('push', (e) => {
       });
     });
 
-    if (!fresh.length) return;          // 新しく知らせるものが無い
+    if (!fresh.length) {
+      // 新しく知らせるものが無い（もう知らせたぶんだけ）。
+      // ★iOS は「通知を出さない push」を嫌うので、出したものは消さずに置き換えます
+      const n = live.reduce((a, x) => a + Number(x.d.n || 0), 0);
+      await self.registration.showNotification('新しいメール', Object.assign({
+        body: '未読 ' + n + '通', tag: WAIT_TAG, renotify: true,
+      }, ICONS));
+      return;
+    }
 
     const show = fresh.slice(0, PUSH_MAX);
     for (const { name, m } of show) {
       await self.registration.showNotification(
-        (m.from || '差出人なし') + '（' + name + '）', {
+        (m.from || '差出人なし') + '（' + name + '）', Object.assign({
           body: m.subj || '（件名なし）',
           tag: 'mail-' + m.id,          // ★1通ごとに別の印。並んで出ます
-          icon: 'img/app-icon-192.png',
-          badge: 'img/app-icon-192.png',
           data: { at: Date.now() },
-        });
+        }, ICONS));
     }
     if (fresh.length > show.length) {
-      await self.registration.showNotification('ほか ' + (fresh.length - show.length) + '通', {
-        body: '新しいメールが届いています',
-        tag: 'mailboard-more', renotify: true,
-        icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png',
-      });
+      await self.registration.showNotification('ほか ' + (fresh.length - show.length) + '通', Object.assign({
+        body: '新しいメールが届いています', tag: 'mailboard-more', renotify: true,
+      }, ICONS));
     }
+    // ★先に出した「取りに行っています…」を片づけます（中身が出そろったので）
+    try {
+      const olds = await self.registration.getNotifications({ tag: WAIT_TAG });
+      olds.forEach((n) => n.close());
+    } catch (err) { /* 消せなくても困りません */ }
     // 覚えておくのは新しい200件だけ（増え続けないように）
     await kvSet('pushSeen', fresh.map((x) => String(x.m.id)).concat(seen).slice(0, 200));
   })());
