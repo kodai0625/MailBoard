@@ -73,7 +73,20 @@ const Store = {
       for (let i = 0; i * this.CHUNK < rows.length; i++) {
         st.put(rows.slice(i * this.CHUNK, (i + 1) * this.CHUNK), i);
       }
-      tx.oncomplete = () => { this.savedLen = rows.length; ok(rows.length); };
+      tx.oncomplete = () => {
+        this.savedLen = rows.length;
+        // ★受け口ごとの通数を覚えます。次に開いたとき、索引を読み終わる前に
+        //   「いま何通持っているか」を渡せるようにするためです（2026-11-22）
+        try {
+          const c = {};
+          for (let i = 0; i < rows.length; i++) {
+            const sc = String(rows[i][12] || '');
+            c[sc] = (c[sc] || 0) + 1;
+          }
+          this.set('count', c).catch(() => {});
+        } catch (e) { /* 覚え損ねても、今までどおり動きます */ }
+        ok(rows.length);
+      };
       tx.onerror = () => ng(tx.error);
     });
   },

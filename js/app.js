@@ -2860,6 +2860,28 @@ async function boot() {
   //   同じものを二度直すことになります
   S.main = live[0];
 
+  /* ★**受け口に聞くのを、いちばん先に始めます。**
+   *
+   *   前は「端末の索引を全部読む → それから通信」の順でした。
+   *   5万3千通ぶんを読むのに時間がかかるので、**通知から開いたとき**に
+   *   新着が出るまで待たされていました（2026-11-22、ko-dai さんの
+   *   「通知は来たのに、一覧になかなか出てこない」）。
+   *   通信と読み込みは関わりがないので、同時に走らせます。
+   * ★「いま何通持っているか」は、別に覚えてある数をそのまま使います
+   *   （索引を読み終わるのを待たなくてよいように）。 */
+  const haveSaved = {};
+  try {
+    const c = await Store.get('count');
+    if (c && typeof c === 'object') Object.assign(haveSaved, c);
+  } catch (e) { /* はじめてなら、ありません */ }
+  const syncEarly = Promise.all(live.map((src) =>
+    Api.sync(src, false, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+  // 受け口の状態も、同じく先に聞いておきます（索引の読み込みと同時に進みます）
+  const probeEarly = Promise.all(live.map((src) =>
+    Api.probe(src, undefined, src === S.main)
+      .then((p) => ({ src, p }))
+      .catch((e) => ({ src, e }))));
+
   // 端末にためてあるぶんを先に出します。通信を待たせないためです
   S.busy = '読み込んでいます…'; render();
   try {
@@ -2902,15 +2924,13 @@ async function boot() {
     // ★**取り込みも、同じタイミングで頼んでおきます。**
     //   受け口に聞き終わってから頼むと、往復が2回ぶん並びます。
     //   Apps Script は眠っていると返事に数秒かかるので、そこが効きます
-    const syncP = Promise.all(live.map((src) =>
-      Api.sync(src).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+    // ★取り込みは**いちばん先に**頼んであります（上の syncEarly）
+    const syncP = syncEarly;
     // ★いちばんの受け口だけ full で聞きます。決まりごと・上書き・テンプレが
     //   一緒に返ってくるので、そのぶんの3往復が消えます
-    const probes = await Promise.all(live.map((src) =>
-      Api.probe(src, undefined, src === S.main)
-        .then((p) => ({ src, p }))
-        // ★1つの受け口がつまずいても、もう片方は動かします
-        .catch((e) => ({ src, e }))));
+    // ★状態も**いちばん先に**聞いてあります（上の probeEarly）。
+    //   索引の読み込みと同時に進むので、通知から開いたときが速くなります
+    const probes = await probeEarly;
 
     let main = null;
     for (const { src, p, e } of probes) {
