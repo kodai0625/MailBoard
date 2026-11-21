@@ -73,7 +73,30 @@ const Store = {
       for (let i = 0; i * this.CHUNK < rows.length; i++) {
         st.put(rows.slice(i * this.CHUNK, (i + 1) * this.CHUNK), i);
       }
-      tx.oncomplete = () => ok(rows.length);
+      tx.oncomplete = () => { this.savedLen = rows.length; ok(rows.length); };
+      tx.onerror = () => ng(tx.error);
+    });
+  },
+
+  /**
+   * **1行だけ**変わったときに、その行が入っている束だけを書き直します。
+   *
+   * ★前は1通読むたびに索引をまるごと書き直していました（5万3千行・27束）。
+   *   変わるのは1行なので、束1つ（2千行）で足ります（2026-11-22）。
+   * ★行の数が変わっていたら束の切れ目がずれるので、そのときは全部書きます。
+   *   数が同じでも、並べ替えがあれば崩れるため、**既読の印を付けるときだけ**使います。
+   */
+  async savePart(rows, i) {
+    if (i < 0) return 0;
+    await this.open();
+    if (this.savedLen !== rows.length) return this.saveAll(rows);
+    const db = this.db;
+    const k = Math.floor(i / this.CHUNK);
+    const part = rows.slice(k * this.CHUNK, (k + 1) * this.CHUNK);
+    return new Promise((ok, ng) => {
+      const tx = db.transaction('chunks', 'readwrite');
+      tx.objectStore('chunks').put(part, k);
+      tx.oncomplete = () => ok(part.length);
       tx.onerror = () => ng(tx.error);
     });
   },

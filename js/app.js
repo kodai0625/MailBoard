@@ -896,6 +896,11 @@ async function openMail(key) {
     if (!had) {
       const d = await Api.body(src, id);
       bodyPut(key, d);
+      /* ★取りに行っているあいだに**別のメールを開いている**ことがあります。
+       *   前は確かめずに出していたので、先に開いたメールの本文が、
+       *   あとから開いたメールの件名の下に出ました。AI にもその本文が渡ります
+       *   （会社の本文が個人の返信の材料になる）。2026-11-22 の指摘。 */
+      if (S.openKey !== key) return;
       S._body = d;
       paintBody();
     }
@@ -904,10 +909,16 @@ async function openMail(key) {
       // 開いたら既読。Gmail 側と食い違わないよう索引も直します
       applyRead([key], true);
       Api.read(src, [id], true).catch(() => {});
-      Store.saveAll(S.rows);
+      /* ★前はここで索引を**まるごと**書き直していました（5万3千行）。
+       *   1通読むたびに走るので、開くたびに引っかかります。
+       *   変わったのは1行だけなので、その行が入っている束だけ書きます
+       *   （2026-11-22 の指摘）。 */
+      Store.savePart(S.rows, S.rows.findIndex((r) => Rules.keyOf(r) === key))
+        .catch(() => {});
       render();
     }
   } catch (e) {
+    if (S.openKey !== key) return;        // ★もう別のメールを開いています
     $('#dBody').srcdoc = wrapBody('<p style="color:#b00">' + esc(String(e.message || e)) + '</p>', false);
   }
 }
@@ -1802,9 +1813,16 @@ async function syncNew(quiet, pre) {
        *   来たときだけ合わせます（2026-11-22）。 */
       if (d.unread) {
         const un = new Set(d.unread.map(String));
+        /* ★受け口は2500通で一覧を打ち切ります。打ち切られたときに
+         *   「この一覧に無い＝既読」と決めると、**残りを全部既読にして**
+         *   しまいます。そのときは「未読を付ける」だけにします
+         *   （2026-11-22 の指摘。そのとおりでした）。 */
+        const cut = !!d.unreadCut;
         for (let i = 0; i < S.rows.length; i++) {
           if (String(S.rows[i][F.SRC]) !== src) continue;
-          const now = un.has(String(S.rows[i][F.ID])) ? 1 : 0;
+          const has = un.has(String(S.rows[i][F.ID]));
+          if (!has && cut) continue;            // 打ち切られているので、既読にはしません
+          const now = has ? 1 : 0;
           // ★変わったときだけ印を付けます。下の「書き直すかどうか」に使います
           if (S.rows[i][F.UNREAD] !== now) { S.rows[i][F.UNREAD] = now; dirty = true; }
         }
@@ -1814,9 +1832,12 @@ async function syncNew(quiet, pre) {
       if (d.starred) {
         // ★中身が変わったときだけ書きます（毎回書くと、そのぶん遅くなります）
         const was = Array.from(S.star).filter((k) => k.indexOf(src + ':') === 0).sort().join(',');
-        Array.from(S.star).forEach((k) => {
-          if (k.indexOf(src + ':') === 0) S.star.delete(k);
-        });
+        // ★未読と同じく、打ち切られていたら**外しません**（足すだけ）
+        if (!d.starredCut) {
+          Array.from(S.star).forEach((k) => {
+            if (k.indexOf(src + ':') === 0) S.star.delete(k);
+          });
+        }
         d.starred.forEach((id) => S.star.add(src + ':' + String(id)));
         const now = d.starred.map((id) => src + ':' + String(id)).sort().join(',');
         if (was !== now) await Store.set('star', Array.from(S.star));
@@ -2025,8 +2046,25 @@ async function pushTurnOn() {
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { toast('通知が許可されませんでした', true); return; }
 
-    const key = (await Api.pushKey(live[0])).key;
+    /* ★受け口どうしで**通知の鍵をそろえます。**
+     *
+     *   端末の「受け取り口（購読）」は**1つの鍵にだけ**結びつきます。
+     *   受け口ごとに別の鍵だと、2つ目の受け口が送った通知は
+     *   送り先にはねられ、**会社のメールの通知が届きません**
+     *   （2026-11-22 の指摘。そのとおりでした）。
+     *   1つ目の受け口の鍵を、ほかの受け口に配ります。 */
+    let key = (await Api.pushKey(live[0])).key;
     if (!key) throw new Error('受け口から通知の鍵が返りませんでした');
+    if (live.length > 1) {
+      S.busy = '通知の鍵をそろえています…'; render();
+      const d = (await Api.vapidGet(live[0])).d;
+      for (const src of live.slice(1)) {
+        const r2 = await Api.vapidSet(src, d);
+        if (r2 && r2.key && r2.key !== key) {
+          throw new Error(srcName(src) + ' の鍵をそろえられませんでした');
+        }
+      }
+    }
     const reg = await pushReg();
     if (!reg || !reg.pushManager) {
       throw new Error('この画面では通知を使えません。いちど開き直してください');
@@ -3210,7 +3248,7 @@ function bindEvents() {
         //   食い違って、押しても直らないように見えました
         const left = Number(d.inbox || 0) - Number(d.after || 0);
         const消した = Number(d.removed || 0) + Number(d.gone || 0);
-        toast('二重や、範囲から出ていたものを ' + cleaned.toLocaleString() + '通 消しました。'
+        toast('二重や、範囲から出ていたものを ' + 消した.toLocaleString() + '通 消しました。'
           + '索引 ' + Number(d.after || 0).toLocaleString() + '通'
           + (left > 0 ? '／あと ' + left.toLocaleString() + '通 足りません。「続きを読み込む」を'
              : left < 0 ? '／範囲より ' + (-left).toLocaleString() + '通 多いままです'
