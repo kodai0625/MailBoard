@@ -55,6 +55,12 @@ const S = {
   fullAt: 0,          // 前に「ぜんぶそろえた」時刻（未読・フラグ・合計）
   gapStuck: {},       // 受け口 → 取り戻しても増えなかったときの通数
   lastSync: {},       // 受け口 → 前の取り込みで何が返ってきたか（⚙ に出します）
+  /* 受け口 → **索引を何行目まで読んだか。**
+   * ★手元の通数ではありません。重なったメールは1つにまとめて消すので、
+   *   手元の通数は索引より少なくなります（会社は172通少なくなっていました）。
+   *   その数で「何行目から」を頼むと、**毎回同じ172通を取り寄せては捨てる**
+   *   ことになります（2026-11-22、ko-dai さんの画面で判明）。 */
+  consumed: {},
   recounting: 0,      // いま合計を数え直している最中か
   syncing: 0,         // 上の帯の「更新」を押している最中か
   saving: 0,          // 索引を裏で書いている最中か
@@ -1785,6 +1791,11 @@ async function syncNew(quiet, pre) {
       const sc = String(S.rows[i][F.SRC]);
       if (have0[sc] !== undefined) have0[sc]++;
     }
+    // ★「どこまで読んだか」を覚えていれば、そちらを使います（上の説明）
+    live.forEach((src) => {
+      const c = Number(S.consumed[src] || 0);
+      if (c > have0[src]) have0[src] = c;
+    });
     const got = pre || await Promise.all(live.map((src) =>
       Api.sync(src, light, have0[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
 
@@ -1817,6 +1828,13 @@ async function syncNew(quiet, pre) {
       // ★足りないぶんも同じ返事に入っています（往復が1回ぶん減ります）
       const n1 = mergeRows((d.added || []).concat(d.catchUp || []), src);
       S.lastSync[src].got = n1;          // 実際に増えた数
+      /* ★受け口が「足りないぶん」を最後まで返してくれたなら、
+       *   そこまで読んだことになります。覚えておけば、次からは
+       *   同じところを取り寄せ直しません。
+       *   1000通ちょうどなら、まだ先がある（途中）ということです。 */
+      if (d.catchUp && d.catchUp.length < 1000 && d.indexed) {
+        S.consumed[src] = Number(d.indexed);
+      }
       added += n1;
       if (n1) dirty = true;
       if (d.replied) await addReplied(src, d.replied);
@@ -1885,7 +1903,9 @@ async function syncNew(quiet, pre) {
        *     差がずっと残ります）。2026-11-22。 */
       if (S.gapStuck[src] === total) continue;
       for (let round = 0; round < 40; round++) {       // 最大 4万通ぶん
-        const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
+        const have = Math.max(
+          S.rows.filter((r) => String(r[F.SRC]) === src).length,
+          Number(S.consumed[src] || 0));
         const gap = total - have;
         /* ★こちらの通数のほうが多いことがあります（点検で索引が減ったあとなど）。
          *   前はここで止めていたので、**そのあと何をしても新着が入りません**でした。
@@ -1921,6 +1941,8 @@ async function syncNew(quiet, pre) {
     //   いました**（2026-11-19、ko-dai さんの「読み込みに非常に長い時間がかかる」）。
     //   ふだんは何も変わらないので、ほとんどの回はここを通りません。
     if (dirty) saveSoon();          // ★待ちません（上の説明）
+    // ★「索引を何行目まで読んだか」も残します（次に開いたときに使います）
+    await Store.set('consumed', S.consumed);
     await Store.set('fmt', Store.FMT);
     await Store.set('lastSync', Date.now());
     // 古い受け口のぶんだけ、ものさしを聞き直します
@@ -2921,6 +2943,14 @@ async function boot() {
   try {
     const c = await Store.get('count');
     if (c && typeof c === 'object') Object.assign(haveSaved, c);
+    // ★「索引を何行目まで読んだか」のほうが確かです（手元の通数は重複を消したぶん少ない）
+    const cs = await Store.get('consumed');
+    if (cs && typeof cs === 'object') {
+      S.consumed = cs;
+      Object.keys(cs).forEach((k) => {
+        if (Number(cs[k] || 0) > Number(haveSaved[k] || 0)) haveSaved[k] = Number(cs[k]);
+      });
+    }
   } catch (e) { /* はじめてなら、ありません */ }
   const syncEarly = Promise.all(live.map((src) =>
     Api.sync(src, false, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
