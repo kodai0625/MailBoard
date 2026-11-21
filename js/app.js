@@ -1774,8 +1774,18 @@ async function syncNew(quiet, pre) {
      *   （Gmail や「メール」アプリで既読にしたぶんを合わせるため）。 */
     const light = !!quiet && (Date.now() - (S.fullAt || 0) < FULL_SYNC_SEC * 1000);
     if (!light) S.fullAt = Date.now();
+    /* ★いま持っている通数を一緒に渡します。
+     *   受け口は「今回あたらしく入れたぶん」しか返さないので、
+     *   Mac に先を越されたスマホは**何も受け取れず**、
+     *   そのあと「取り戻し」でもう1往復していました（2026-11-22）。 */
+    const have0 = {};
+    live.forEach((src) => { have0[src] = 0; });
+    for (let i = 0; i < S.rows.length; i++) {
+      const sc = String(S.rows[i][F.SRC]);
+      if (have0[sc] !== undefined) have0[sc]++;
+    }
     const got = pre || await Promise.all(live.map((src) =>
-      Api.sync(src, light).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+      Api.sync(src, light, have0[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
@@ -1796,7 +1806,8 @@ async function syncNew(quiet, pre) {
       S.err[src] = '';
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
-      const n1 = mergeRows(d.added || [], src);
+      // ★足りないぶんも同じ返事に入っています（往復が1回ぶん減ります）
+      const n1 = mergeRows((d.added || []).concat(d.catchUp || []), src);
       added += n1;
       if (n1) dirty = true;
       if (d.replied) await addReplied(src, d.replied);

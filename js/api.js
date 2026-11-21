@@ -127,7 +127,13 @@ const Api = {
   probe(src, pin, full) { return this.post(src, 'probe', full ? { full: true } : {}, pin); },
   scan(src) { return this.post(src, 'scan', {}); },
   // light ＝ 新しく届いたぶんだけ（見張りが10秒おきに呼ぶほう）
-  sync(src, light) { return this.post(src, 'sync', light ? { light: true } : {}); },
+  // have ＝ この端末がいま持っている通数。渡すと、足りないぶんも一緒に返ります
+  sync(src, light, have) {
+    const b = {};
+    if (light) b.light = true;
+    if (have !== undefined) b.have = have;
+    return this.post(src, 'sync', b);
+  },
   peek(src) { return this.post(src, 'peek', {}); },
   recount(src) { return this.post(src, 'recount', {}); },
   pushKey(src) { return this.post(src, 'pushKey', {}); },
