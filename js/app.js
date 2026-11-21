@@ -54,6 +54,7 @@ const S = {
   watchBusy: 0,       // いま聞いている最中か
   fullAt: 0,          // 前に「ぜんぶそろえた」時刻（未読・フラグ・合計）
   gapStuck: {},       // 受け口 → 取り戻しても増えなかったときの通数
+  lastSync: {},       // 受け口 → 前の取り込みで何が返ってきたか（⚙ に出します）
   recounting: 0,      // いま合計を数え直している最中か
   syncing: 0,         // 上の帯の「更新」を押している最中か
   saving: 0,          // 索引を裏で書いている最中か
@@ -1806,8 +1807,16 @@ async function syncNew(quiet, pre) {
       S.err[src] = '';
       S.indexed[src] = Number(d.indexed || 0);
       if (d.inbox) S.inbox[src] = Number(d.inbox);
+      /* ★何が返ってきたかを覚えます。⚙ に出して、届かないときに
+       *   **どこで止まっているか**を見られるようにするためです（2026-11-22）。 */
+      S.lastSync[src] = {
+        at: Date.now(), light: !!d.light,
+        have: have0[src], added: (d.added || []).length,
+        catchUp: (d.catchUp || []).length, indexed: Number(d.indexed || 0),
+      };
       // ★足りないぶんも同じ返事に入っています（往復が1回ぶん減ります）
       const n1 = mergeRows((d.added || []).concat(d.catchUp || []), src);
+      S.lastSync[src].got = n1;          // 実際に増えた数
       added += n1;
       if (n1) dirty = true;
       if (d.replied) await addReplied(src, d.replied);
@@ -2576,6 +2585,27 @@ function countLine(id, n) {
  * ★受け口ごとに合言葉も索引も別なので、まとめて1つの画面に
  *   すると「どちらの話か」が分からなくなります。箱に分けて出します。
  */
+/**
+ * 前の取り込みで、何が返ってきたか。
+ *
+ * ★届かないときに**どこで止まっているか**を見るためのものです。
+ *   「手元 ◯通／受け口 ◯通／新しく ◯通／足りないぶん ◯通／増えた ◯通」。
+ *   増えた数が 0 のまま新着が出ないなら、受け口が返していません。
+ */
+function syncLine(src) {
+  const d = S.lastSync[src];
+  if (!d) return '';
+  const t = new Date(d.at);
+  const hh = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')
+           + ':' + String(t.getSeconds()).padStart(2, '0');
+  return '<p class="muted small">前の取り込み ' + hh + (d.light ? '（軽い）' : '（ぜんぶ）')
+    + '／手元 ' + Number(d.have || 0).toLocaleString() + '通'
+    + '／受け口 ' + Number(d.indexed || 0).toLocaleString() + '通'
+    + '／新しく ' + d.added + '通'
+    + '／足りないぶん ' + d.catchUp + '通'
+    + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b></p>';
+}
+
 function renderSources() {
   renderScanNote();
   const box = $('#srcBox');
@@ -2633,6 +2663,7 @@ function renderSources() {
             + '<button class="link" data-act="showpin">見る</button></p>'
           : '')
       + (on ? countLine(id, n) : '')
+      + (on ? syncLine(id) : '')     // ★前の取り込みで何が返ってきたか（届かないとき用）
       + (on
           ? '<label class="lbl">読み込む範囲</label>'
             + '<div class="row"><input class="src__q" autocomplete="off"'
