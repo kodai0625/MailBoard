@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="6d02c972a5">
+<meta name="app-version" content="c266955143">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=6d02c972a5">
-<link rel="stylesheet" href="css/design.css?v=6d02c972a5">
+<link rel="stylesheet" href="css/style.css?v=c266955143">
+<link rel="stylesheet" href="css/design.css?v=c266955143">
 </head>
 <body>
 
@@ -391,6 +391,9 @@
       <p class="muted small" id="pushNote"></p>
       <div class="row">
         <button class="pill pill--go" id="pushOn">通知を受け取る</button>
+        <!-- ★受け取っている最中でも押せます。受け口どうしの**鍵をそろえ直す**のは
+             ここを押したときだけなので、隠れていると直せませんでした（2026-11-22） -->
+        <button class="pill" id="pushAgain" hidden>入れ直す</button>
         <button class="pill" id="pushOff" hidden>やめる</button>
         <!-- ★届かないときに、何が起きたかを見るためのものです（2026-11-22）。
              403＝鍵がちがう／410＝送り先がもう無い／201＝送れている -->
@@ -423,13 +426,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=6d02c972a5"></script>
-<script src="js/store.js?v=6d02c972a5"></script>
-<script src="js/api.js?v=6d02c972a5"></script>
-<script src="js/update.js?v=6d02c972a5"></script>
-<script src="js/rules.js?v=6d02c972a5"></script>
-<script src="js/ai.js?v=6d02c972a5"></script>
-<script src="js/fill.js?v=6d02c972a5"></script>
-<script src="js/app.js?v=6d02c972a5"></script>
+<script src="js/config.js?v=c266955143"></script>
+<script src="js/store.js?v=c266955143"></script>
+<script src="js/api.js?v=c266955143"></script>
+<script src="js/update.js?v=c266955143"></script>
+<script src="js/rules.js?v=c266955143"></script>
+<script src="js/ai.js?v=c266955143"></script>
+<script src="js/fill.js?v=c266955143"></script>
+<script src="js/app.js?v=c266955143"></script>
 </body>
 </html>

@@ -2018,6 +2018,11 @@ async function renderPush() {
   const sub = await pushSub();
   const yes = !!sub && Notification.permission === 'granted';
   on.hidden = yes; off.hidden = !yes;
+  /* ★受け取っている最中でも「入れ直す」を出します。
+   *   受け口どうしの**鍵をそろえる**のは「通知を受け取る」を押したときだけで、
+   *   そのボタンが隠れていると**直す道がありませんでした**（2026-11-22）。 */
+  const again = $('#pushAgain');
+  if (again) again.hidden = !yes;
   if (!yes) {
     note.textContent = Notification.permission === 'denied'
       ? '通知が断られています。端末の設定から Mail Board の通知を許可してください。'
@@ -2094,6 +2099,7 @@ async function pushTurnOn() {
      *   1つ目の受け口の鍵を、ほかの受け口に配ります。 */
     let key = (await Api.pushKey(live[0])).key;
     if (!key) throw new Error('受け口から通知の鍵が返りませんでした');
+    let aligned = 0;
     if (live.length > 1) {
       S.busy = '通知の鍵をそろえています…'; render();
       const d = (await Api.vapidGet(live[0])).d;
@@ -2102,6 +2108,7 @@ async function pushTurnOn() {
         if (r2 && r2.key && r2.key !== key) {
           throw new Error(srcName(src) + ' の鍵をそろえられませんでした');
         }
+        aligned++;
       }
     }
     const reg = await pushReg();
@@ -2126,7 +2133,10 @@ async function pushTurnOn() {
     await Store.set('pushSrc', live.map((src) => ({
       url: Api.url(src), pin: Api.pin(src), name: srcName(src),
     })));
-    toast(ng.length ? ng.join('・') + ' には登録できませんでした' : '通知を受け取ります', !!ng.length);
+    toast(ng.length
+      ? ng.join('・') + ' には登録できませんでした'
+      : '通知を受け取ります' + (aligned ? '（受け口' + (aligned + 1) + 'つの鍵をそろえました）' : ''),
+      !!ng.length);
   } catch (e) {
     toast(String(e.message || e), true);
   } finally {
@@ -3369,6 +3379,7 @@ function bindEvents() {
     if (other) other.hidden = sel.value !== FILL_OWN;
   });
 
+  on('#pushAgain', 'click', pushTurnOn);
   on('#pushLog', 'click', showPushLog);
   on('#pushOn', 'click', pushTurnOn);
   on('#pushOff', 'click', pushTurnOff);
