@@ -131,6 +131,8 @@ const Api = {
   peek(src) { return this.post(src, 'peek', {}); },
   recount(src) { return this.post(src, 'recount', {}); },
   pushKey(src) { return this.post(src, 'pushKey', {}); },
+  // 通知が届かないときの記録（403＝鍵ちがい／410＝もう無い／201＝送れている）
+  pushLog(src) { return this.post(src, 'pushLog', {}); },
   // 通知の鍵をそろえるため（★秘密の鍵。合言葉が合うときだけ、https の上だけ）
   vapidGet(src) { return this.post(src, 'vapidGet', {}); },
   vapidSet(src, d) { return this.post(src, 'vapidSet', { d }); },

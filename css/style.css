@@ -359,6 +359,14 @@ body.is-modal { overflow: hidden; }
   .airow .pill { flex: 1 1 0; min-width: 0; white-space: normal; }
 }
 
+/* ---- 通知の記録 ---- */
+.pushlog {
+  margin: 8px 0 0; padding: 9px 11px; border-radius: 10px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-size: 11.5px; line-height: 1.6; color: var(--text-sub);
+  white-space: pre-wrap; word-break: break-all; max-height: 40vh; overflow: auto;
+}
+
 /* ---- 送信済み ---- */
 /* ★.chip は**上の暗い帯**に置くための色です（白い字・白いふち）。
    明るい面にそのまま置くと、ほとんど見えませんでした（2026-11-21）。 */

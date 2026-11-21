@@ -2036,6 +2036,34 @@ async function renderPush() {
     : 'この端末は受け取ります（受け口' + live.length + 'つとも登録ずみ）。';
 }
 
+/**
+ * 通知が届いたかどうかの記録を出します。
+ *
+ * ★届かないときに**何も分からない**のがいちばん困ります。受け口は
+ *   送るたびに結果を残しているので、それをそのまま見せます（2026-11-22）。
+ *   403 … 鍵がちがう（受け口どうしで鍵がそろっていない）
+ *   410 / 404 … 送り先がもう無い（通知を入れ直してください）
+ *   201 / 200 … 受け口からは送れている（端末側の設定を見ます）
+ */
+async function showPushLog() {
+  const box = $('#pushLogBox');
+  if (!box) return;
+  box.hidden = false;
+  box.textContent = '聞いています…';
+  const live = Api.live();
+  const out = [];
+  for (const src of live) {
+    try {
+      const d = await Api.pushLog(src);
+      out.push('── ' + srcName(src) + '（送り先 ' + Number(d.n || 0) + '件）\n'
+        + (String(d.log || '').trim() || '（まだ1回も送っていません）'));
+    } catch (e) {
+      out.push('── ' + srcName(src) + '\n✗ ' + String(e.message || e));
+    }
+  }
+  box.textContent = out.join('\n\n');
+}
+
 async function pushTurnOn() {
   if (!pushReady()) { toast('この端末は通知に対応していません', true); return; }
   const live = Api.live();
@@ -3330,6 +3358,7 @@ function bindEvents() {
     if (other) other.hidden = sel.value !== FILL_OWN;
   });
 
+  on('#pushLog', 'click', showPushLog);
   on('#pushOn', 'click', pushTurnOn);
   on('#pushOff', 'click', pushTurnOff);
 
