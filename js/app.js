@@ -1878,6 +1878,10 @@ async function syncNew(quiet, pre) {
       for (let round = 0; round < 40; round++) {       // 最大 4万通ぶん
         const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
         const gap = total - have;
+        /* ★こちらの通数のほうが多いことがあります（点検で索引が減ったあとなど）。
+         *   前はここで止めていたので、**そのあと何をしても新着が入りません**でした。
+         *   いまは受け口が「うしろ100行」を返してくれるので、ここは止めて大丈夫です
+         *   （2026-11-22）。 */
         if (gap <= 0) break;
         if (!quiet || gap > 200) {
           S.busy = nm + 'の取りこぼしを入れています… あと ' + gap.toLocaleString() + '通';
