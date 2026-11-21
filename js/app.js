@@ -2487,9 +2487,22 @@ async function assignSender(key) {
  *  設定
  * ========================================================== */
 
+/** いま読んでいるアプリの版を出します（「今すぐ最新に」が効いたか見るため） */
+function paintAppVer() {
+  const el = $('#appVer');
+  if (!el) return;
+  const m = document.querySelector('meta[name="app-version"]');
+  const v = m ? m.content.trim() : '';
+  const src = (document.querySelector('script[src*="js/app.js"]') || {}).getAttribute
+    ? document.querySelector('script[src*="js/app.js"]').getAttribute('src') : '';
+  el.textContent = 'アプリ ' + (v || '（版の印なし）')
+    + (src ? '（' + src + '）' : '');
+}
+
 function openSettings() {
   $('#settings').hidden = false;
   document.body.classList.add('is-modal');
+  paintAppVer();
   renderSources();
   renderPush();
   // ★呼び名で棚が変わります。ここを黙っていると、iPhone で
