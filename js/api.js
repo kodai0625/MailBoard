@@ -126,7 +126,8 @@ const Api = {
   //   アプリ側で今までどおり別に聞き直します）
   probe(src, pin, full) { return this.post(src, 'probe', full ? { full: true } : {}, pin); },
   scan(src) { return this.post(src, 'scan', {}); },
-  sync(src) { return this.post(src, 'sync', {}); },
+  // light ＝ 新しく届いたぶんだけ（見張りが10秒おきに呼ぶほう）
+  sync(src, light) { return this.post(src, 'sync', light ? { light: true } : {}); },
   peek(src) { return this.post(src, 'peek', {}); },
   recount(src) { return this.post(src, 'recount', {}); },
   pushKey(src) { return this.post(src, 'pushKey', {}); },

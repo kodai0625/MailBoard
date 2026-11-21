@@ -52,6 +52,8 @@ const S = {
   watching: 0,        // 見張りの番号
   watchAt: 0,         // 前に聞いた時刻
   watchBusy: 0,       // いま聞いている最中か
+  fullAt: 0,          // 前に「ぜんぶそろえた」時刻（未読・フラグ・合計）
+  gapStuck: {},       // 受け口 → 取り戻しても増えなかったときの通数
   recounting: 0,      // いま合計を数え直している最中か
   syncing: 0,         // 上の帯の「更新」を押している最中か
   saving: 0,          // 索引を裏で書いている最中か
@@ -1711,6 +1713,12 @@ function saveSoon() {
  *   （前は「聞く」→「取り込む」の2往復で、受け口が眠っていると
  *     そのぶん待ち時間が倍になりました。2026-11-20）。
  */
+/* ★「ぜんぶそろえる」のを、どれくらいの間あいで入れるか。
+ *   未読・フラグ・返信ずみ・合計は、新着を出すのには要りません。
+ *   毎回そろえていたので、1通届くだけで Gmail に7往復していました
+ *   （2026-11-22、ko-dai さんの「受信に時間がかかる」）。 */
+const FULL_SYNC_SEC = 300;    // 5分に1回は、そろえ直します
+
 async function syncNew(quiet, pre) {
   const live = Api.live();
   if (!live.length) return;
@@ -1725,8 +1733,13 @@ async function syncNew(quiet, pre) {
     // ★受け口は**まとめて同時に**聞きます。1つずつ待つと、受け口の数だけ
     //   1〜3秒が足し算になります（受け口は別々の Google アカウントなので、
     //   同時に頼んでもぶつかりません）
+    /* ★見張りが呼んだとき（quiet）は**軽いほう**を頼みます。
+     *   ただし、しばらく軽いのが続いたら1回そろえ直します
+     *   （Gmail や「メール」アプリで既読にしたぶんを合わせるため）。 */
+    const light = !!quiet && (Date.now() - (S.fullAt || 0) < FULL_SYNC_SEC * 1000);
+    if (!light) S.fullAt = Date.now();
     const got = pre || await Promise.all(live.map((src) =>
-      Api.sync(src).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+      Api.sync(src, light).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
@@ -1750,7 +1763,7 @@ async function syncNew(quiet, pre) {
       const n1 = mergeRows(d.added || [], src);
       added += n1;
       if (n1) dirty = true;
-      await addReplied(src, d.replied);
+      if (d.replied) await addReplied(src, d.replied);
       // ★見張りのものさしは、取り込みの返事に入っています。
       //   前はこのあと peek をもう1回ずつ聞いていました（往復の無駄）。
       //   古い受け口は返さないので、そのときだけ今までどおり聞きます
@@ -1759,12 +1772,17 @@ async function syncNew(quiet, pre) {
       // 既読かどうかは Gmail 側でも変わるので、毎回そろえます。
       // ★合わせるのは、その受け口から来た行だけです。全部に当てると、
       //   もう片方の受け口のメールが軒並み既読になってしまいます
-      const un = new Set((d.unread || []).map(String));
-      for (let i = 0; i < S.rows.length; i++) {
-        if (String(S.rows[i][F.SRC]) !== src) continue;
-        const now = un.has(String(S.rows[i][F.ID])) ? 1 : 0;
-        // ★変わったときだけ印を付けます。下の「書き直すかどうか」に使います
-        if (S.rows[i][F.UNREAD] !== now) { S.rows[i][F.UNREAD] = now; dirty = true; }
+      /* ★軽いほう（light）では未読の一覧が来ません。
+       *   来ていないのに合わせようとすると、**全部を既読にして**しまいます。
+       *   来たときだけ合わせます（2026-11-22）。 */
+      if (d.unread) {
+        const un = new Set(d.unread.map(String));
+        for (let i = 0; i < S.rows.length; i++) {
+          if (String(S.rows[i][F.SRC]) !== src) continue;
+          const now = un.has(String(S.rows[i][F.ID])) ? 1 : 0;
+          // ★変わったときだけ印を付けます。下の「書き直すかどうか」に使います
+          if (S.rows[i][F.UNREAD] !== now) { S.rows[i][F.UNREAD] = now; dirty = true; }
+        }
       }
       // フラグも同じようにそろえます。Gmail や「メール」アプリで
       // 付け外ししたものが、こちらにも出るようにするためです
@@ -1794,6 +1812,12 @@ async function syncNew(quiet, pre) {
       if (!d) continue;
       const total = Number(d.indexed || 0);
       const nm = srcName(src);
+      /* ★前に取り戻して**1通も増えなかった**ときの数を覚えておきます。
+       *   覚えていなかったので、差が埋まらない受け口では
+       *   **新着を見るたびに1000行を取り寄せては捨てて**いました
+       *   （索引に二重の行があると、こちらは Message-ID でまとめるので
+       *     差がずっと残ります）。2026-11-22。 */
+      if (S.gapStuck[src] === total) continue;
       for (let round = 0; round < 40; round++) {       // 最大 4万通ぶん
         const have = S.rows.filter((r) => String(r[F.SRC]) === src).length;
         const gap = total - have;
@@ -1809,7 +1833,10 @@ async function syncNew(quiet, pre) {
           const n2 = mergeRows(r2.rows || [], src);
           added += n2;
           if (n2) dirty = true;
-          if (!n2) break;                              // 進まないなら、やめます
+          if (!n2) {                                   // 進まないなら、やめます
+            S.gapStuck[src] = total;                   // ★次からは、数が変わるまで聞きません
+            break;
+          }
         } catch (e) {
           break;                                       // 取り戻せなくても、次の回に
         }
