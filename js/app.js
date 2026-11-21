@@ -492,6 +492,29 @@ function render() {
   $('#busy').textContent = S.busy;
 }
 
+/* ============================================================
+ *  アイコンの数字（バッジ）
+ *
+ *  ★ホーム画面（iPhone）や Dock（Mac）に追加したときだけ出ます。
+ *    ふつうのタブでは出ません（ブラウザが受け付けません）。
+ *  ★iPhone は**通知を許していること**が要ります。
+ *  ★アプリを閉じているあいだは、通知の世話係（sw.js）が付け替えます。
+ *    開いているあいだは、ここが受け持ちます。
+ * ========================================================== */
+
+let BADGE_AT = -1;          // 前に付けた数（同じなら触りません）
+
+function paintBadge(n) {
+  const v = Math.max(0, Number(n) || 0);
+  if (v === BADGE_AT) return;        // ★毎回呼ばれるので、変わったときだけ
+  BADGE_AT = v;
+  try {
+    if (!navigator.setAppBadge) return;
+    if (v > 0) navigator.setAppBadge(v).catch(() => {});
+    else if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => {});
+  } catch (e) { /* 付けられない置きかたもあります */ }
+}
+
 function renderFolders() {
   const c = folderCounts();
   // ★並びは「自分のアドレスとして登録した順」を先に置きます。
@@ -503,6 +526,8 @@ function renderFolders() {
   const addrs = known.concat(rest);
   const total = S.rows.length;
   const unread = S.rows.reduce((n, r) => n + (r[F.UNREAD] ? 1 : 0), 0);
+  // ★アイコンの数字も、ここでそろえます（画面の「全受信」の未読と同じ数）
+  if (!S.demo) paintBadge(unread);
 
   let h = chip('', '全受信', total, unread, S.folder === '');
   addrs.forEach((a) => {

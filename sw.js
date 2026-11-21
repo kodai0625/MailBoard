@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が ebcaf8944a を版の印に
+ *  ★このファイルは 公開用を作る.py が 44a60e0f2b を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = 'ebcaf8944a';
+const VERSION = '44a60e0f2b';
 const CACHE = 'mailboard-' + VERSION;
 
 /* ★公開したものかどうか。
@@ -169,6 +169,22 @@ const PUSH_MAX = 8;          // 一度に出す通知の数（鳴りっぱなし
 const WAIT_TAG = 'mailboard-new';
 const ICONS = { icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png' };
 
+/**
+ * アイコンの数字（バッジ）を付け替えます。
+ *
+ * ★アプリを閉じているあいだに未読が増えても、画面が動かないので
+ *   アプリ側からは付け替えられません。ここが受け持ちます（2026-11-22）。
+ * ★ホーム画面（iPhone）や Dock（Mac）に追加したときだけ出ます。
+ *   iPhone は通知を許していることが要ります。
+ */
+async function setBadge(n) {
+  const v = Math.max(0, Number(n) || 0);
+  try {
+    if (v > 0) { if (self.navigator.setAppBadge) await self.navigator.setAppBadge(v); }
+    else if (self.navigator.clearAppBadge) await self.navigator.clearAppBadge();
+  } catch (e) { /* 付けられない置きかたもあります */ }
+}
+
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     /* ★**先に1つ出してから**、件名を取りに行きます。
@@ -188,6 +204,12 @@ self.addEventListener('push', (e) => {
     const got = await Promise.all(srcs.map((s) =>
       askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
     const live = got.filter((x) => x && x.d && x.d.n);
+    /* ★受け口に聞けたぶんだけで数えます。
+     *   聞けなかった受け口があっても、聞けたぶんは正しいので付け替えます。
+     *   ★どこにも聞けなかったときは**触りません**（0 にすると、
+     *     未読があるのにバッジが消えてしまいます）。 */
+    const asked = got.filter((x) => x && x.d);
+    if (asked.length) await setBadge(asked.reduce((a, x) => a + Number(x.d.n || 0), 0));
 
     if (!live.length) {
       // 受け口に聞けなかったとき。★消さずに、文だけ置き換えます
