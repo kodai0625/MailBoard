@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="9aab812cf1">
+<meta name="app-version" content="031d5e2cd1">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=9aab812cf1">
-<link rel="stylesheet" href="css/design.css?v=9aab812cf1">
+<link rel="stylesheet" href="css/style.css?v=031d5e2cd1">
+<link rel="stylesheet" href="css/design.css?v=031d5e2cd1">
 </head>
 <body>
 
@@ -164,6 +164,9 @@
     <div class="meta__l"><span id="dDate"></span></div>
     <div class="meta__l" id="dCat"></div>
     <button class="pill pill--img" id="imgBtn">画像を表示</button>
+    <!-- ★外国語のメールは自動で日本語になります（⚙ で切れます）。
+         押すと原文と行き来できます -->
+    <button class="pill" id="transBtn" hidden>日本語にする</button>
     <!-- 配信停止のお知らせ。押したときだけ出ます -->
     <p class="unsub" id="dUnsub" hidden></p>
     <!-- 同じやり取りのほかのメール。1通しかないときは出ません -->
@@ -389,6 +392,17 @@
     </section>
 
     <section class="sec">
+      <h3>外国語のメール</h3>
+      <label class="chk chk--dark"><input type="checkbox" id="autoTrans">
+        外国語のメールを、開いたら自動で日本語にする</label>
+      <p class="muted small">日本語の字がほとんど無いメールだけが対象です。
+        本文の下の<b>「日本語にする」</b>を押せば、いつでも手で切り替えられます。<br>
+        訳すのは<b>受け口の中</b>（Google 翻訳）で、鍵も契約も要りません。
+        渡すのは Gmail にあるメールなので、<b>新しい相手には渡りません</b>。
+        訳した文は<b>この端末の中だけ</b>に置き、どこにも残しません。</p>
+    </section>
+
+    <section class="sec">
       <h3>プッシュ通知</h3>
       <p class="muted small">新しいメールが来たとき、この端末に知らせます。
         見張りは<b>受け口（Google のサーバー）</b>がやるので、
@@ -431,13 +445,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=9aab812cf1"></script>
-<script src="js/store.js?v=9aab812cf1"></script>
-<script src="js/api.js?v=9aab812cf1"></script>
-<script src="js/update.js?v=9aab812cf1"></script>
-<script src="js/rules.js?v=9aab812cf1"></script>
-<script src="js/ai.js?v=9aab812cf1"></script>
-<script src="js/fill.js?v=9aab812cf1"></script>
-<script src="js/app.js?v=9aab812cf1"></script>
+<script src="js/config.js?v=031d5e2cd1"></script>
+<script src="js/store.js?v=031d5e2cd1"></script>
+<script src="js/api.js?v=031d5e2cd1"></script>
+<script src="js/update.js?v=031d5e2cd1"></script>
+<script src="js/rules.js?v=031d5e2cd1"></script>
+<script src="js/ai.js?v=031d5e2cd1"></script>
+<script src="js/fill.js?v=031d5e2cd1"></script>
+<script src="js/app.js?v=031d5e2cd1"></script>
 </body>
 </html>

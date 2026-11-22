@@ -147,6 +147,8 @@ const Api = {
   pushDel(src, endpoint) { return this.post(src, 'pushDel', { endpoint }); },
   pull(src, offset, limit) { return this.post(src, 'pull', { offset, limit }); },
   body(src, id) { return this.post(src, 'body', { id }); },
+  // メールを日本語に（受け口の中で Google 翻訳を使います。鍵も契約も要りません）
+  translate(src, id, to) { return this.post(src, 'translate', { id, to: to || 'ja' }); },
   // 送信済み。★索引には入れず、見るときだけ取りに行きます
   sent(src, addr, page, max) { return this.post(src, 'sent', { addr, page, max }); },
   read(src, ids, read) { return this.post(src, 'read', { ids, read }); },

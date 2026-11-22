@@ -54,6 +54,8 @@ const S = {
   watchBusy: 0,       // いま聞いている最中か
   fullAt: 0,          // 前に「ぜんぶそろえた」時刻（未読・フラグ・合計）
   gapStuck: {},       // 受け口 → 取り戻しても増えなかったときの通数
+  trans: new Map(),   // 見出し → 訳した文（★端末の中だけ。どこにも残しません）
+  showTrans: false,   // いま訳したほうを出しているか
   lastSync: {},       // 受け口 → 前の取り込みで何が返ってきたか（⚙ に出します）
   /* 受け口 → **索引を何行目まで読んだか。**
    * ★手元の通数ではありません。重なったメールは1つにまとめて消すので、
@@ -854,6 +856,7 @@ async function openMail(key) {
   if (!row) return;
   S.openKey = key;
   S.images = false;
+  S.showTrans = false;              // 開くたびに、まず原文から
   const src = String(row[F.SRC] || '');
   const id = String(row[F.ID]);
 
@@ -895,7 +898,9 @@ async function openMail(key) {
   const had = bodyGet(key);
   if (had) {
     S._body = had;
+    if (S.trans.has(key)) S.showTrans = true;     // 前に訳してあれば、そのまま出します
     paintBody();
+    autoTrans(key, had);
   } else {
     $('#dBody').srcdoc = wrapBody('<p style="color:#888">読み込んでいます…</p>', false);
   }
@@ -910,6 +915,7 @@ async function openMail(key) {
       if (S.openKey !== key) return;
       S._body = d;
       paintBody();
+      autoTrans(key, d);
     }
     prefetchNext(key);
     if (row[F.UNREAD]) {
@@ -1011,8 +1017,114 @@ function paintStarBtn() {
 function paintBody() {
   const d = S._body;
   if (!d) return;
-  $('#dBody').srcdoc = wrapBody(d.html || ('<pre>' + esc(d.text || '') + '</pre>'), S.images);
-  $('#imgBtn').hidden = S.images;
+  const tr = S.showTrans ? S.trans.get(S.openKey) : null;
+  if (tr) {
+    /* ★訳した文は**文字だけ**で出します。HTML ごと訳すと飾りが崩れるので、
+     *   受け口でも文字のほうを訳しています。画像も出ません（そのぶん安全です）。 */
+    $('#dBody').srcdoc = wrapBody(
+      '<p style="color:#888;font-size:13px">日本語にしました'
+      + (tr.cut ? '（長いので途中までです）' : '') + '</p>'
+      + '<pre>' + esc(tr.text || '') + '</pre>', false);
+  } else {
+    $('#dBody').srcdoc = wrapBody(d.html || ('<pre>' + esc(d.text || '') + '</pre>'), S.images);
+  }
+  $('#imgBtn').hidden = S.images || !!tr;
+  paintTransBtn();
+}
+
+/* ============================================================
+ *  日本語にする
+ *
+ *  ★受け口の中で Google 翻訳を使います。**鍵も契約も要りません。**
+ *    渡すのは Gmail（Google）にあるメールなので、新しい相手には渡りません。
+ *  ★訳した文は**この端末の中だけ**に置きます。どこにも残しません
+ *    （本文を複製しない、という決まりと同じ考えです）。
+ * ========================================================== */
+
+/**
+ * 外国語のメールなら、自動で日本語にします。
+ *
+ * ★日本語のメールまで訳すと、むだに受け口を呼ぶだけです。
+ *   日本語の字がほとんど無いときだけにします。
+ * ★失敗しても何も言いません（押せば手で訳せます）。
+ */
+function autoTrans(key, d) {
+  if (S.demo || !autoTransOn()) return;
+  if (S.trans.has(key)) return;
+  const text = String((d && d.text) || '').trim()
+    || stripTags(String((d && d.html) || ''));
+  if (!looksForeign(text)) return;
+  doTrans(key, true);
+}
+
+/**
+ * 外国語らしいか。
+ *
+ * ★見るのは**かな**です。漢字で見ると、中国語を日本語と取り違えます。
+ *   日本語の文には、どんなに硬くても「は・を・の」などのかなが必ず混じります。
+ * ★字を数えるのに `\W` を使ってはいけません。**タイ語やアラビア語が
+ *   「字ではない」ことになって**、外国語と気づけませんでした（2026-11-22）。
+ */
+function looksForeign(text) {
+  const s = String(text || '').slice(0, 3000);
+  let letters = 0;
+  try { letters = (s.match(/\p{L}/gu) || []).length; }
+  catch (e) { letters = s.replace(/[\s\d\W_]/g, '').length; }   // 古い置きかた用
+  if (letters < 20) return false;                     // 短すぎて決められません
+  const kana = (s.match(/[\u3040-\u30ff]/g) || []).length;
+  return kana / letters < 0.03;
+}
+
+/** 自動で日本語にするか（⚙ で切り替え） */
+function autoTransOn() {
+  try { return localStorage.getItem(APP.storageKey + ':autoTrans') !== '0'; }
+  catch (e) { return true; }
+}
+function setAutoTrans(on) {
+  try { localStorage.setItem(APP.storageKey + ':autoTrans', on ? '1' : '0'); } catch (e) { /* 使えない置きかたも */ }
+}
+
+function paintTransBtn() {
+  const b = $('#transBtn');
+  if (!b) return;
+  const d = S._body;
+  b.hidden = S.demo || !d;
+  b.textContent = S.showTrans ? '原文に戻す' : '日本語にする';
+  b.classList.toggle('is-on', S.showTrans);
+}
+
+/** 押したとき。訳してあれば行き来するだけです */
+async function toggleTrans() {
+  const key = S.openKey;
+  if (!key) return;
+  if (S.showTrans) { S.showTrans = false; paintBody(); return; }
+  if (S.trans.has(key)) { S.showTrans = true; paintBody(); return; }
+  await doTrans(key, false);
+}
+
+/**
+ * 受け口に訳してもらいます。
+ * quiet … 自動のときは、失敗しても何も言いません
+ */
+async function doTrans(key, quiet) {
+  const row = rowByKey(key);
+  if (!row) return;
+  const b = $('#transBtn');
+  const was = b ? b.textContent : '';
+  if (b) { b.disabled = true; b.textContent = '日本語にしています…'; }
+  try {
+    const d = await Api.translate(String(row[F.SRC] || ''), String(row[F.ID]));
+    // ★取りに行っているあいだに別のメールを開いていたら、捨てます
+    if (S.openKey !== key) return;
+    S.trans.set(key, d);
+    while (S.trans.size > 30) S.trans.delete(S.trans.keys().next().value);
+    S.showTrans = true;
+    paintBody();
+  } catch (e) {
+    if (!quiet) toast(String(e.message || e), true);
+  } finally {
+    if (b) { b.disabled = false; if (b.textContent !== was) paintTransBtn(); }
+  }
 }
 
 /**
@@ -2525,6 +2637,8 @@ function openSettings() {
   $('#settings').hidden = false;
   document.body.classList.add('is-modal');
   paintAppVer();
+  const at = $('#autoTrans');
+  if (at) at.checked = autoTransOn();
   renderSources();
   renderPush();
   // ★呼び名で棚が変わります。ここを黙っていると、iPhone で
@@ -3488,6 +3602,8 @@ function bindEvents() {
     if (other) other.hidden = sel.value !== FILL_OWN;
   });
 
+  on('#transBtn', 'click', toggleTrans);
+  on('#autoTrans', 'change', (e) => setAutoTrans(e.target.checked));
   on('#pushAgain', 'click', pushTurnOn);
   on('#pushLog', 'click', showPushLog);
   on('#pushOn', 'click', pushTurnOn);

@@ -359,6 +359,9 @@ body.is-modal { overflow: hidden; }
   .airow .pill { flex: 1 1 0; min-width: 0; white-space: normal; }
 }
 
+/* ★設定の中は明るい面なので、白い字のチェックらんは読めません */
+.chk--dark { color: var(--text); }
+
 /* ---- 通知の記録 ---- */
 .pushlog {
   margin: 8px 0 0; padding: 9px 11px; border-radius: 10px;
