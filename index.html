@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="031d5e2cd1">
+<meta name="app-version" content="4462442ec2">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=031d5e2cd1">
-<link rel="stylesheet" href="css/design.css?v=031d5e2cd1">
+<link rel="stylesheet" href="css/style.css?v=4462442ec2">
+<link rel="stylesheet" href="css/design.css?v=4462442ec2">
 </head>
 <body>
 
@@ -163,7 +163,10 @@
     <div class="meta__l"><span id="dFrom"></span></div>
     <div class="meta__l"><span id="dDate"></span></div>
     <div class="meta__l" id="dCat"></div>
-    <button class="pill pill--img" id="imgBtn">画像を表示</button>
+    <!-- ★ここで出すのは**外から取ってくる画像**だけです。
+         メールに埋め込まれた画像（ロゴ・署名）は、受け口が中身を取り出して
+         差し替えるので、押さなくても最初から出ます（2026-11-22） -->
+    <button class="pill pill--img" id="imgBtn">外の画像も出す</button>
     <!-- ★外国語のメールは自動で日本語になります（⚙ で切れます）。
          押すと原文と行き来できます -->
     <button class="pill" id="transBtn" hidden>日本語にする</button>
@@ -445,13 +448,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=031d5e2cd1"></script>
-<script src="js/store.js?v=031d5e2cd1"></script>
-<script src="js/api.js?v=031d5e2cd1"></script>
-<script src="js/update.js?v=031d5e2cd1"></script>
-<script src="js/rules.js?v=031d5e2cd1"></script>
-<script src="js/ai.js?v=031d5e2cd1"></script>
-<script src="js/fill.js?v=031d5e2cd1"></script>
-<script src="js/app.js?v=031d5e2cd1"></script>
+<script src="js/config.js?v=4462442ec2"></script>
+<script src="js/store.js?v=4462442ec2"></script>
+<script src="js/api.js?v=4462442ec2"></script>
+<script src="js/update.js?v=4462442ec2"></script>
+<script src="js/rules.js?v=4462442ec2"></script>
+<script src="js/ai.js?v=4462442ec2"></script>
+<script src="js/fill.js?v=4462442ec2"></script>
+<script src="js/app.js?v=4462442ec2"></script>
 </body>
 </html>
