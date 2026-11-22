@@ -57,6 +57,9 @@ const S = {
   trans: new Map(),   // 見出し → 訳した文（★端末の中だけ。どこにも残しません）
   showTrans: false,   // いま訳したほうを出しているか
   lastSync: {},       // 受け口 → 前の取り込みで何が返ってきたか（⚙ に出します）
+  /* 起動にかかった時間（★遅いときに、どこで待っているかを見るため。
+   *   推測で直そうとして何度も外したので、数字を出すようにしました） */
+  bootMs: {},
   /* 受け口 → **索引を何行目まで読んだか。**
    * ★手元の通数ではありません。重なったメールは1つにまとめて消すので、
    *   手元の通数は索引より少なくなります（会社は172通少なくなっていました）。
@@ -1908,8 +1911,10 @@ async function syncNew(quiet, pre) {
       const c = Number(S.consumed[src] || 0);
       if (c > have0[src]) have0[src] = c;
     });
+    const t0 = Date.now();
     const got = pre || await Promise.all(live.map((src) =>
       Api.sync(src, light, have0[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+    const askMs = pre ? 0 : (Date.now() - t0);     // ★受け口の返事にかかった時間
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
@@ -1933,7 +1938,7 @@ async function syncNew(quiet, pre) {
       /* ★何が返ってきたかを覚えます。⚙ に出して、届かないときに
        *   **どこで止まっているか**を見られるようにするためです（2026-11-22）。 */
       S.lastSync[src] = {
-        at: Date.now(), light: !!d.light,
+        at: Date.now(), light: !!d.light, ms: askMs,
         have: have0[src], added: (d.added || []).length,
         catchUp: (d.catchUp || []).length, indexed: Number(d.indexed || 0),
       };
@@ -2752,13 +2757,35 @@ function syncLine(src) {
     + '／受け口 ' + Number(d.indexed || 0).toLocaleString() + '通'
     + '／新しく ' + d.added + '通'
     + '／足りないぶん ' + d.catchUp + '通'
-    + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b></p>';
+    + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b>'
+    + (d.ms ? '／かかった <b>' + (d.ms / 1000).toFixed(1) + '秒</b>' : '')
+    + '</p>';
+}
+
+/**
+ * 起動にどれだけかかったか。
+ *
+ * ★「スマホだと遅い」を、推測ではなく数字で見るためのものです。
+ *   どこで待っているかが分かれば、直す場所が決まります。
+ */
+function bootLine() {
+  const b = S.bootMs;
+  if (!b || !b.done) return '';
+  const sec = (n) => (n === undefined ? '—' : (n / 1000).toFixed(1) + '秒');
+  return '<p class="muted small">前の起動：'
+    + '索引の読み込み <b>' + sec(b.load) + '</b>'
+    + '（' + Number(b.rows || 0).toLocaleString() + '通）'
+    + '／受け口の取り込み <b>' + sec(b.sync) + '</b>'
+    + '／状態の確認 ' + sec(b.probe)
+    + '／<b>新着が出るまで ' + sec(b.done) + '</b></p>';
 }
 
 function renderSources() {
   renderScanNote();
   const box = $('#srcBox');
   if (!box) return;
+  const bl = $('#bootLine');
+  if (bl) bl.innerHTML = bootLine();
   box.innerHTML = SOURCES.map((src) => {
     const id = src.id;
     // ★「つながっています」は、URL と合言葉が入っているだけでは
@@ -3066,18 +3093,24 @@ async function boot() {
       });
     }
   } catch (e) { /* はじめてなら、ありません */ }
+  const bootT0 = Date.now();
+  S.bootMs = { at: bootT0 };
   const syncEarly = Promise.all(live.map((src) =>
-    Api.sync(src, false, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
+    Api.sync(src, false, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))))
+    .then((r) => { S.bootMs.sync = Date.now() - bootT0; return r; });
   // 受け口の状態も、同じく先に聞いておきます（索引の読み込みと同時に進みます）
   const probeEarly = Promise.all(live.map((src) =>
     Api.probe(src, undefined, src === S.main)
       .then((p) => ({ src, p }))
-      .catch((e) => ({ src, e }))));
+      .catch((e) => ({ src, e }))))
+    .then((r) => { S.bootMs.probe = Date.now() - bootT0; return r; });
 
   // 端末にためてあるぶんを先に出します。通信を待たせないためです
   S.busy = '読み込んでいます…'; render();
   try {
     S.rows = await Store.loadAll();
+    S.bootMs.load = Date.now() - bootT0;
+    S.bootMs.rows = S.rows.length;
     const fmt = await Store.get('fmt');
     if (fmt !== Store.FMT) {
       const n = fixRows(S.rows);
@@ -3202,6 +3235,7 @@ async function boot() {
   } catch (e) {
     toast(String(e.message || e), true);
   }
+  S.bootMs.done = Date.now() - bootT0;     // ★新着が画面に出るまで
   renderScanNote();
   S.busy = ''; render();
 }
