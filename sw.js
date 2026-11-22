@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 23620f78d1 を版の印に
+ *  ★このファイルは 公開用を作る.py が ed73b78b3b を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '23620f78d1';
+const VERSION = 'ed73b78b3b';
 const CACHE = 'mailboard-' + VERSION;
 
 /* ★公開したものかどうか。
@@ -265,9 +265,6 @@ self.addEventListener('push', (e) => {
     const show = fresh.slice(0, PUSH_MAX);
     for (let i = 0; i < show.length; i++) {
       const { name, m } = show[i];
-      /* ★1通目は、先に出した「取りに行っています…」を**置き換えます。**
-       *   別の印にすると2つ並び、**メール1通で通知が2つ**出ていました
-       *   （2026-11-22、ko-dai さんの指摘）。2通目からは別の印にして並べます。 */
       // ★1通ごとに別の印で並べます（先出しはもうしません）
       await self.registration.showNotification(
         (m.from || '差出人なし') + '（' + name + '）', Object.assign({
@@ -281,8 +278,7 @@ self.addEventListener('push', (e) => {
         body: '新しいメールが届いています', tag: 'mailboard-more', renotify: true,
       }, ICONS));
     }
-    /* ★「取りに行っています…」は、上の1通目が**置き換えて**消えています。
-     *   ここで消しに行くと、置き換えた1通目まで消えてしまいます。 */
+    /* ★先に出す通知は、もうありません（2026-11-23）。片づけるものもありません。 */
     // 覚えておくのは新しい200件だけ（増え続けないように）
     await kvSet('pushSeen', fresh.map((x) => String(x.m.id)).concat(seen).slice(0, 200));
   })());
