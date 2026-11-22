@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 4462442ec2 を版の印に
+ *  ★このファイルは 公開用を作る.py が 23620f78d1 を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '4462442ec2';
+const VERSION = '23620f78d1';
 const CACHE = 'mailboard-' + VERSION;
 
 /* ★公開したものかどうか。
@@ -167,9 +167,12 @@ function kvSet(key, val) {
 
 const PUSH_MAX = 8;          // 一度に出す通知の数（鳴りっぱなしを防ぎます）
 const WAIT_TAG = 'mailboard-new';
-/* ★受け口の返事をどれくらい待つか。これを過ぎたら、先に「来たこと」だけ知らせます。
- *   ふだんは1.5秒ほどで返るので、ここを過ぎることはあまりありません（2026-11-22） */
-const WAIT_MS = 3000;
+/* ★受け口の返事をどれくらい待つか。
+ *   これを過ぎたら、件名はあきらめて「新着があります」だけを出します。
+ *   ★長めにしてあります。**3秒では受け口が眠っているときに間に合わず**、
+ *     結局2つ出ていました（2026-11-23）。iOS は30秒ほど待ってくれるので、
+ *     ここで待ちきるほうが「通知は1つだけ」を守れます。 */
+const WAIT_MS = 12000;
 const ICONS = { icon: 'img/app-icon-192.png', badge: 'img/app-icon-192.png' };
 
 /**
@@ -191,30 +194,35 @@ async function setBadge(n) {
 self.addEventListener('push', (e) => {
   e.waitUntil((async () => {
     /* ★件名は受け口（Apps Script）に聞きに行きます。向こうが眠っていると
-     *   返事に数秒かかり、**その間に iOS が世話係を止めてしまうことがあります。**
-     *   そこで「取りに行っています…」を先に出していましたが、
-     *   ★**iPhone では、あとから出す通知で置き換わらず、2つ並びました**
-     *   （2026-11-22、ko-dai さんの「まだ2通来ます」。印をそろえても消えません）。
+     *   返事に時間がかかります。
      *
-     *   → **待ってみて、間に合えば先出ししません。**ふだんは1.5秒ほどで返るので、
-     *     これで通知は1つだけになります。遅いときだけ先に出します
-     *     （何も出さないと iOS が嫌がるため）。
+     *   ★**通知は、何があっても1通につき1つだけ**にします。
+     *     はじめは「取りに行っています…」を先に出していましたが、
+     *     **iPhone では、あとから出す通知で置き換わらず2つ並びます**
+     *     （印をそろえても、消しに行っても消えません）。
+     *     待ち時間を入れて「間に合えば出さない」ようにしても、
+     *     受け口が眠っていると間に合わず、やはり2つ出ていました
+     *     （2026-11-23、ko-dai さんの「また来るのでなくして」）。
+     *
+     *   → **先出しはやめました。**待てるだけ待って、
+     *     ・間に合えば … 1通ずつ、差出人と件名で知らせます
+     *     ・間に合わなければ … 「新着があります」**だけ**を出して、そこで終わります
+     *       （あとから件名が届いても、もう出しません。2つ目になるので）
+     *     ★何も出さないと iOS が嫌がるので、「出さない」という道は作りません。
      */
     const srcs = (await kvGet('pushSrc')) || [];
     const briefP = Promise.all(srcs.map((s) =>
       askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
-    let waited = false;
-    let got = await Promise.race([
+    const got = await Promise.race([
       briefP,
       new Promise((r) => setTimeout(() => r(null), WAIT_MS)),
     ]);
     if (got === null) {
-      // 遅いので、まず「来たこと」だけ知らせておきます
-      waited = true;
+      // 間に合いませんでした。これ1つで終わりにします
       await self.registration.showNotification('新しいメール', Object.assign({
-        body: '件名を取りに行っています…', tag: WAIT_TAG, renotify: true,
+        body: '新着があります', tag: WAIT_TAG, renotify: true,
       }, ICONS));
-      got = await briefP;
+      return;
     }
     const live = got.filter((x) => x && x.d && x.d.n);
     /* ★受け口に聞けたぶんだけで数えます。
@@ -260,15 +268,11 @@ self.addEventListener('push', (e) => {
       /* ★1通目は、先に出した「取りに行っています…」を**置き換えます。**
        *   別の印にすると2つ並び、**メール1通で通知が2つ**出ていました
        *   （2026-11-22、ko-dai さんの指摘）。2通目からは別の印にして並べます。 */
-      /* ★先出ししたときだけ、1通目でそれを置き換えにいきます
-       *   （iPhone では置き換わらないことがありますが、害はありません）。
-       *   先出ししていなければ、ふつうに1通ごとの印で並べます。 */
-      const first = (i === 0 && waited);
+      // ★1通ごとに別の印で並べます（先出しはもうしません）
       await self.registration.showNotification(
         (m.from || '差出人なし') + '（' + name + '）', Object.assign({
           body: m.subj || '（件名なし）',
-          tag: first ? WAIT_TAG : ('mail-' + m.id),
-          renotify: first,
+          tag: 'mail-' + m.id,
           data: { at: Date.now() },
         }, ICONS));
     }
