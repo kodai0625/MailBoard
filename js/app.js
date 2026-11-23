@@ -2857,7 +2857,9 @@ function bootLine() {
     + '（' + Number(b.rows || 0).toLocaleString() + '通）'
     + '／受け口の取り込み <b>' + sec(b.sync) + '</b>'
     + '／状態の確認 ' + sec(b.probe)
-    + '／<b>新着が出るまで ' + sec(b.done) + '</b></p>';
+    + '／<b>新着が出るまで ' + sec(b.done) + '</b>'
+    + (b.all !== undefined ? '／ぜんぶ終わるまで ' + sec(b.all) : '')
+    + '</p>';
 }
 
 function renderSources() {
@@ -3220,6 +3222,37 @@ async function boot() {
     render();
   } catch (e) { /* はじめてなら空です */ }
 
+  /* ★新着を画面に渡すのは、ここ1か所です（下で2回呼んでも、渡すのは1回だけ）。
+   *
+   *   ★**上で何があっても必ず渡します。**前は「つないでいます…」の try の
+   *     いちばん最後に置いていたので、受け口の状態確認・決まりごとの読み込み・
+   *     索引の受け取りが**1回でも転ぶと、先に頼んであった新着が丸ごと
+   *     捨てられて**いました（2026-11-22、ko-dai さんの「起動時に新着が
+   *     読み込まれるように」）。だから自分の try で守ります。 */
+  let deliveredEarly = false;
+  const deliverEarly = async () => {
+    if (deliveredEarly) return;
+    deliveredEarly = true;
+    try {
+      await syncNew(true, await syncEarly);
+    } catch (e) {
+      toast(String(e.message || e), true);
+    }
+    S.bootMs.done = Date.now() - bootT0;     // ★新着が画面に出るまで
+  };
+  /* ★新着は、**状態の確認（probe）を待たずに**出します。
+   *
+   *   前は状態の確認が返ってくるまで、取り込みの返事を手元に持ったまま
+   *   待っていました。状態の確認は決まりごと・テンプレ・合計・アドレスまで
+   *   読むので、取り込みより重いことがあります。取り込みを速くしても、
+   *   ここで待っていては画面に出るのが早くなりません（2026-11-23）。
+   *   分類は端末にためてある決まりごとでできます。新しい決まりごとが
+   *   届いたら、下で分け直します（recategorize）。
+   *   ★手元にまだ1通も無い受け口があるとき（はじめて足したとき）は、
+   *     索引をまるごと受け取るのが先なので、今までどおり最後に渡します。 */
+  const haveAll = live.every((src) => S.rows.some((x) => String(x[F.SRC]) === src));
+  if (haveAll) await deliverEarly();
+
   /* そのあとで、受け口に聞きに行きます。
    *
    * ★**まとめて同時に聞きます。**前は1つずつ順番に待っていたので、
@@ -3306,22 +3339,10 @@ async function boot() {
     toast(String(e.message || e), true);
   }
 
-  /* ★**新着の取り込みは、上で何があっても必ず行います。**
-   *
-   *   前はこれを上の try の**いちばん最後**に置いていました。そのため
-   *   受け口の状態確認・決まりごとの読み込み・索引の受け取りが
-   *   **1回でも転ぶと、先に頼んであった新着が丸ごと捨てられて**いました。
-   *   受け口が眠っていると、同時に出した頼みの片方だけ転ぶことがあります
-   *   （2026-11-22、ko-dai さんの「起動時に新着が読み込まれるように」）。
-   *
-   *   取り込みは**いちばん先に頼んであります**（syncEarly）。返事はもう
-   *   手元にあるので、ほかが転んでも渡せます。 */
-  try {
-    await syncNew(true, await syncEarly);
-  } catch (e) {
-    toast(String(e.message || e), true);
-  }
-  S.bootMs.done = Date.now() - bootT0;     // ★新着が画面に出るまで
+  /* ★まだ渡していなければ、ここで渡します（はじめて足した受け口があるとき）。
+   *   上の try の**外**なので、手前が転んでも必ず通ります。 */
+  await deliverEarly();
+  S.bootMs.all = Date.now() - bootT0;      // ぜんぶ終わるまで
   renderScanNote();
   S.busy = ''; render();
 }
