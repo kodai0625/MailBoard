@@ -1914,7 +1914,10 @@ async function syncNew(quiet, pre) {
     const t0 = Date.now();
     const got = pre || await Promise.all(live.map((src) =>
       Api.sync(src, light, have0[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
-    const askMs = pre ? 0 : (Date.now() - t0);     // ★受け口の返事にかかった時間
+    /* ★起動のときは**先に頼んである**ので、ここでは測れません。
+     *   起動のほうで測った時間を使います。0 にしていたせいで、
+     *   いちばん見たい場面で秒数が出ていませんでした（2026-11-23）。 */
+    const askMs = pre ? Number((S.bootMs && S.bootMs.sync) || 0) : (Date.now() - t0);
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
@@ -2691,7 +2694,11 @@ function verMark(id) {
   //   どちらが新しいかは分かりません。実際、iPhone の公開版だけ
   //   更新し忘れていて、**古いのはアプリのほうだった**ことがあります
   //   （2026年11月3日）。両方の直しかたを出します。
-  return '<span class="src__ver is-old">アプリと受け口の版が違います。'
+  /* ★どの印どうしが違うのかを出します。出さないと、貼り替えたつもりなのに
+   *   直らないとき、**どちらが古いのかも分かりません**（2026-11-23）。
+   *   受け口が何も返さないときは「（印なし）」と出します。 */
+  return '<span class="src__ver is-old">アプリと受け口の版が違います'
+       + '（アプリ ' + esc(want) + '／受け口 ' + esc(got || '（印なし）') + '）。'
        + 'コードを貼り替えてデプロイするか、アプリを公開し直してください</span>';
 }
 
