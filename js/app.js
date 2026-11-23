@@ -72,6 +72,12 @@ const S = {
   saveWant: false,    // 書き直しの頼みが来ているか
   fill: null,         // テンプレの穴うめで、いま開いているもの
   ping: {},           // 受け口ごとの、1回聞くのにかかった時間 {ms, srv, net}
+  /* ★受け口の状態（版・読み込む範囲・古いぶんまで入ったか・合計）を、
+   *   **この起動で確かめ終わったか**。起動では新着を先に出すので
+   *   （2026-11-23）、確かめ終わる前に ⚙ を開くことがあります。
+   *   そのとき「版が違います（印なし）」「まだ途中です」と**うその知らせ**が出て、
+   *   読み込む範囲も in:inbox に見えていました（ko-dai さんの画面で判明）。 */
+  probed: {},
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
@@ -1695,7 +1701,9 @@ function renderScanNote() {
   const n = $('#scanNote');
   if (!n) return;
   const live = Api.live();
-  n.hidden = S.demo || !live.length || S.scanning || live.every((src) => S.done[src]);
+  // ★確かめていない受け口は「途中」と見なしません（S.probed の説明）
+  n.hidden = S.demo || !live.length || S.scanning
+    || live.every((src) => S.done[src] || !S.probed[src]);
 }
 
 /** 続きを読み込む。1回では終わらないので、終わるまで繰り返します */
@@ -2700,6 +2708,8 @@ function verMark(id) {
   //   古い印が残っているだけで、いまの受け口の版は分からないためです。
   //   「返事がありません」のほうが先に立つ知らせです。
   if (S.ok[id] !== true) return '';
+  // ★まだ確かめていないときは、違うとも同じとも言いません（上の S.probed の説明）
+  if (!S.probed[id]) return '<span class="src__ver">確かめています…</span>';
   const want = String(APP.gasVersion || '');
   if (!want) return '';
   const got = String(S.ver[id] || '');
@@ -2728,6 +2738,10 @@ function verMark(id) {
  *   Gmail を自分で数えるまで気づけませんでした。**並べて出せば一目で分かります。**
  */
 function countLine(id, n) {
+  // ★まだ確かめていないときに「まだ途中です」と出さない（S.probed の説明）
+  if (!S.probed[id] && !S.inbox[id]) {
+    return '<p class="muted small">索引 <b>' + n.toLocaleString() + '通</b> ／ 受け口に確かめています…</p>';
+  }
   const inbox = Number(S.inbox[id] || 0);
   // ★数えているのは「読み込む範囲」に当たる通数です。範囲を広げたのに
   //   「受信トレイ」と出していると、合わない理由を探せません
@@ -2923,9 +2937,17 @@ function renderSources() {
       + (on ? syncLine(id) : '')     // ★前の取り込みで何が返ってきたか（届かないとき用）
       + (on
           ? '<label class="lbl">読み込む範囲</label>'
-            + '<div class="row"><input class="src__q" autocomplete="off"'
-            +   ' value="' + esc(S.query[id] || 'in:inbox') + '">'
-            +   '<button class="pill" data-act="query">覚える</button></div>'
+            /* ★確かめ終わるまでは、欄を空けて触れなくします。
+             *   いまの範囲が分からないうちに in:inbox と出していたので、
+             *   そのまま「覚える」を押すと、**本当の範囲を in:inbox で上書き**
+             *   するところでした（2026-11-23）。 */
+            + (S.probed[id]
+              ? '<div class="row"><input class="src__q" autocomplete="off"'
+                +   ' value="' + esc(S.query[id] || 'in:inbox') + '">'
+                +   '<button class="pill" data-act="query">覚える</button></div>'
+              : '<div class="row"><input class="src__q" autocomplete="off" disabled'
+                +   ' placeholder="受け口に確かめています…" value="">'
+                +   '<button class="pill" data-act="query" disabled>覚える</button></div>')
             + '<p class="muted small">'
             +   'ふつうは <b>in:inbox</b>（受信トレイ）のままで結構です。'
             +   '転送で届くぶん（受信トレイに残らないこともあります）や、'
@@ -3290,6 +3312,7 @@ async function boot() {
       S.query[src] = String(p.query || 'in:inbox');
       S.ver[src] = String(p.version || '');
       S.done[src] = !!p.backfillDone;
+      S.probed[src] = true;              // ★ここから先は、版・範囲・途中かどうかを出してよい
       S.ok[src] = true;
       S.err[src] = '';
       (p.aliases || []).forEach((a) => {
@@ -3318,7 +3341,10 @@ async function boot() {
     await Store.set('over', oo);
     await Store.set('tpl', tt);
     recategorize();
-    render();
+    /* ★⚙ も描き直します。前は取り込み（syncNew）の最後で描き直していたので
+     *   足りていましたが、新着を先に出すようにしたら、状態が届いたあとに
+     *   **⚙ が古いまま**になりました（2026-11-23）。 */
+    render(); renderSources();
 
     // まだ手元に無い受け口があれば、まとめて受け取ります
     for (const src of live) {
@@ -3626,6 +3652,8 @@ function bindEvents() {
       return;
     }
     if (b.dataset.act === 'query') {
+      // ★いまの範囲を確かめる前に変えさせない（上書き事故を防ぐ）
+      if (!S.probed[src]) { toast('受け口に確かめ終わってから変えてください'); return; }
       const q = $('.src__q', box).value.trim();
       if (!q) { toast('からにはできません', true); return; }
       if (q === (S.query[src] || '')) { toast('もう同じです'); return; }
@@ -3763,7 +3791,7 @@ function bindEvents() {
   });
   // ★「続きを読み込む」。索引がそろっていないときだけ、一覧の上に出ます
   on('#scanBtn', 'click', () => {
-    const left = Api.live().filter((src) => !S.done[src]);
+    const left = Api.live().filter((src) => S.probed[src] && !S.done[src]);
     if (!left.length) { toast('もうそろっています'); return; }
     scanLoop(left[0]);
   });
