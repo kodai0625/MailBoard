@@ -1957,6 +1957,7 @@ async function syncNew(quiet, pre) {
         at: Date.now(), light: !!d.light, ms: Number(ms || 0),
         // ★受け口の中で使った時間（うち順番待ち）と、通信そのものの時間を探す目印
         srv: d.srvMs, lock: d.lockMs, netName: d._net,
+        steps: Array.isArray(d.steps) ? d.steps : null,   // ★受け口の中の手順ごとの時間
         have: have0[src], added: (d.added || []).length,
         catchUp: (d.catchUp || []).length, indexed: Number(d.indexed || 0),
       };
@@ -2784,9 +2785,27 @@ function syncLine(src) {
     + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b>'
     + (d.ms ? '／かかった ' + timeParts(d) : '')
     + '</p>'
+    + stepsLine(d.steps)
     + (S.ping[src] && S.ping[src].ms
       ? '<p class="muted small">見張りの1回（いちばん軽い問い合わせ）：' + timeParts(S.ping[src]) + '</p>'
       : '');
+}
+
+/**
+ * 受け口の中の時間を、手順ごとに並べます（いちばん長いものを太字に）。
+ *
+ * ★受け口の中で 2.0〜2.6秒 と分かっても、その中の何が重いのかが
+ *   分からないと直せません（2026-11-23）。0.05秒に満たないものは省きます。
+ */
+function stepsLine(steps) {
+  if (!Array.isArray(steps) || !steps.length) return '';
+  const list = steps.filter((x) => Array.isArray(x) && Number(x[1]) >= 50);
+  if (!list.length) return '';
+  const max = Math.max(...list.map((x) => Number(x[1])));
+  return '<p class="muted small">受け口の中の内訳：' + list.map((x) => {
+    const t = esc(String(x[0])) + ' ' + (Number(x[1]) / 1000).toFixed(1) + '秒';
+    return Number(x[1]) === max ? '<b>' + t + '</b>' : t;
+  }).join('・') + '</p>';
 }
 
 /**
