@@ -64,6 +64,31 @@ function 読めるエラーに(msg) {
   return t;
 }
 
+/* ★通信そのものにかかった時間を、あとから探せるようにします。
+ *
+ *   アプリの中でストップウォッチを押すと、起動のときは索引の読み込みなど
+ *   **手元の仕事が終わるまで止まりません。**通信が遅いのか手元が遅いのか
+ *   が分かりません。ブラウザが自分で記録している時間（Resource Timing）なら、
+ *   手元の忙しさに左右されません（2026-11-23、4.0秒→4.3秒で原因が見えなかったため）。
+ *
+ *   ★同じ受け口に同時に2つ頼むこと（取り込みと状態の確認）があるので、
+ *     住所に目印（?mb=…）をつけて見分けます。受け口は目印を見ません。 */
+let NET_N = 0;
+try {
+  // 記録は250件でいっぱいになり、それ以上は残りません。いっぱいになったら空けます
+  performance.addEventListener('resourcetimingbufferfull', () => performance.clearResourceTimings());
+} catch (e) { /* 古いブラウザ。測れないだけで、動きは変わりません */ }
+
+/** 目印つきの住所で記録を探して、通信にかかったミリ秒を返します（無ければ undefined） */
+function netMs(name) {
+  if (!name) return undefined;
+  try {
+    const es = performance.getEntriesByName(name);
+    const e = es[es.length - 1];
+    return e && e.duration > 0 ? Math.round(e.duration) : undefined;
+  } catch (err) { return undefined; }
+}
+
 const Api = {
   _key(src, k) { return APP.storageKey + ':' + src + ':' + k; },
 
@@ -104,7 +129,8 @@ const Api = {
   async post(src, action, body, pin) {
     const url = this.url(src);
     if (!url) throw new Error(this.name(src) + ' の受け口が入っていません');
-    const res = await fetch(url, {
+    const tagged = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'mb=' + action + '.' + (++NET_N);
+    const res = await fetch(tagged, {
       method: 'POST',
       // text/plain にするのは、ブラウザに事前確認（preflight）を
       // させないためです。Apps Script は事前確認に応えないので、
@@ -118,6 +144,7 @@ const Api = {
     if (!data.ok) {
       throw new Error(this.name(src) + '： ' + 読めるエラーに(data.error || '断られました'));
     }
+    data._net = tagged;               // ★あとで netMs() で通信の時間を探すための目印
     return data;
   },
 

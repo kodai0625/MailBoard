@@ -71,7 +71,7 @@ const S = {
   saving: 0,          // 索引を裏で書いている最中か
   saveWant: false,    // 書き直しの頼みが来ているか
   fill: null,         // テンプレの穴うめで、いま開いているもの
-  pingMs: 0,          // 受け口に1回聞くのにかかった時間（ミリ秒）
+  ping: {},           // 受け口ごとの、1回聞くのにかかった時間 {ms, srv, net}
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
@@ -1793,12 +1793,20 @@ async function watchOnce() {
   try {
     // ★受け口は**まとめて同時に**聞きます。1つずつ待つと、受け口の数だけ
     //   1〜2秒が足し算になり、10秒おきにした意味が薄れます
-    const t0 = Date.now();
-    const got = await Promise.all(live.map((src) =>
-      Api.peek(src).then((r) => ({ src, h: String(r.h || '') }))
-        .catch(() => ({ src, h: '' }))));
-    // ★かかった時間を覚えておきます。⚙ に出して、間あいを決める手がかりにします
-    S.pingMs = Date.now() - t0;
+    // ★かかった時間を受け口ごとに覚えます。⚙ に出して、間あいを決める手がかりにします
+    const got = await Promise.all(live.map((src) => {
+      const t1 = Date.now();
+      return Api.peek(src).then((r) => {
+        /* ★時間を覚えるのに転んでも、見張りは止めません。
+         *   ここで転ぶと下の catch に落ちて「印が取れない」扱いになり、
+         *   **新着を取り込まなくなります**（検算で実際に止まりました）。 */
+        try {
+          if (!S.ping) S.ping = {};
+          S.ping[src] = { ms: Date.now() - t1, srv: r.srvMs, netName: r._net };
+        } catch (err) { /* 測れないだけです */ }
+        return { src, h: String(r.h || '') };
+      }).catch(() => ({ src, h: '' }));
+    }));
 
     let moved = false;
     for (const { src, h } of got) {
@@ -1913,20 +1921,22 @@ async function syncNew(quiet, pre) {
       const c = Number(S.consumed[src] || 0);
       if (c > have0[src]) have0[src] = c;
     });
-    const t0 = Date.now();
-    const got = pre || await Promise.all(live.map((src) =>
-      Api.sync(src, light, have0[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))));
-    /* ★起動のときは**先に頼んである**ので、ここでは測れません。
-     *   起動のほうで測った時間を使います。0 にしていたせいで、
-     *   いちばん見たい場面で秒数が出ていませんでした（2026-11-23）。 */
-    const askMs = pre ? Number((S.bootMs && S.bootMs.sync) || 0) : (Date.now() - t0);
+    /* ★時間は**受け口ごとに**測ります。まとめて測っていたので、
+     *   いちばん遅い受け口の秒数が、全部の受け口に同じように出ていました
+     *   （2026-11-23。どちらが遅いのか分からなかった）。
+     * ★起動のときは**先に頼んである**ので、起動のほうで測った時間が入っています。 */
+    const got = pre || await Promise.all(live.map((src) => {
+      const t1 = Date.now();
+      return Api.sync(src, light, have0[src])
+        .then((d) => ({ src, d, ms: Date.now() - t1 })).catch((e) => ({ src, e }));
+    }));
 
     // ★取り込んだ中身をさわるのは**ここから1つずつ**です。
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
     const failed = [];
     let dirty = false;                 // 索引を書き直す必要があるか
     let didFull = false;               // ぜんぶそろえた返事が来たか
-    for (const { src, d, e } of got) {
+    for (const { src, d, e, ms } of got) {
       if (e || !d) {
         // ★転んだ受け口は、名前を控えて必ず知らせます。
         //   まとめて同時に聞くようにしたとき（2026-11-18）、
@@ -1944,7 +1954,9 @@ async function syncNew(quiet, pre) {
       /* ★何が返ってきたかを覚えます。⚙ に出して、届かないときに
        *   **どこで止まっているか**を見られるようにするためです（2026-11-22）。 */
       S.lastSync[src] = {
-        at: Date.now(), light: !!d.light, ms: askMs,
+        at: Date.now(), light: !!d.light, ms: Number(ms || 0),
+        // ★受け口の中で使った時間（うち順番待ち）と、通信そのものの時間を探す目印
+        srv: d.srvMs, lock: d.lockMs, netName: d._net,
         have: have0[src], added: (d.added || []).length,
         catchUp: (d.catchUp || []).length, indexed: Number(d.indexed || 0),
       };
@@ -2770,8 +2782,45 @@ function syncLine(src) {
     + '／新しく ' + d.added + '通'
     + '／足りないぶん ' + d.catchUp + '通'
     + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b>'
-    + (d.ms ? '／かかった <b>' + (d.ms / 1000).toFixed(1) + '秒</b>' : '')
-    + '</p>';
+    + (d.ms ? '／かかった ' + timeParts(d) : '')
+    + '</p>'
+    + (S.ping[src] && S.ping[src].ms
+      ? '<p class="muted small">見張りの1回（いちばん軽い問い合わせ）：' + timeParts(S.ping[src]) + '</p>'
+      : '');
+}
+
+/**
+ * かかった時間を「受け口の中＋行き帰り＋手元」に分けます。足すと全体になります。
+ *
+ * ★どこを直せば速くなるかは、ここの内訳で決まります。
+ *   受け口の中 … Apps Script が仕事をしていた時間。こちらのコードで直せます
+ *   行き帰り   … 電波と、Google が受け口を起こす準備。ほとんど直せません
+ *                （減らせるのは往復の回数だけ）
+ *   手元       … 返事はもう来ていたのに、端末が別の仕事で手いっぱいだった時間
+ * ★表計算の呼び出しを19回→7回に減らしても 4.0秒→4.3秒 で、どこが遅いのかを
+ *   推測では当てられなかったので、分けて出すことにしました（2026-11-23）。
+ */
+function timeParts(d) {
+  const total = Number(d.ms || 0);
+  if (!total) return '';
+  if (d.net === undefined && d.netName) {
+    const n = netMs(d.netName);
+    if (n) d.net = n;
+  }
+  const sec = (n) => (n / 1000).toFixed(1) + '秒';
+  const head = '<b>' + sec(total) + '</b>';
+  // 古い受け口は、中で使った時間を返しません
+  if (d.srv === undefined || d.srv === null || !(Number(d.srv) >= 0)) return head;
+  const srv = Number(d.srv);
+  const parts = ['受け口の中 ' + sec(srv)
+    + (Number(d.lock) >= 100 ? '（うち順番待ち ' + sec(Number(d.lock)) + '）' : '')];
+  if (d.net) {
+    parts.push('行き帰り ' + sec(Math.max(0, d.net - srv)));
+    parts.push('手元 ' + sec(Math.max(0, total - d.net)));
+  } else {
+    parts.push('そのほか ' + sec(Math.max(0, total - srv)));
+  }
+  return head + '（' + parts.join('＋') + '）';
 }
 
 /**
@@ -2819,11 +2868,10 @@ function renderSources() {
       +     (on ? 'つながっています'
              : dead ? '返事がありません'
              : has ? '合言葉がまだ' : 'URL がまだ') + '</span>'
-      // ★1回聞くのに何秒かかっているかを出します。
-      //   「もっと短い間あいにできないか」は、ここの数字を見ないと決められません。
-      //   受け口は全部まとめて同時に聞いているので、数字は共通です
-      +   (on && S.pingMs
-            ? '<span class="src__ping">応答 ' + (S.pingMs / 1000).toFixed(1) + '秒</span>'
+      // ★1回聞くのに何秒かかっているかを、受け口ごとに出します。
+      //   「もっと短い間あいにできないか」は、ここの数字を見ないと決められません
+      +   (on && S.ping[id] && S.ping[id].ms
+            ? '<span class="src__ping">応答 ' + (S.ping[id].ms / 1000).toFixed(1) + '秒</span>'
             : '')
       +   verMark(id) + '</div>'
       + (dead ? '<p class="muted small is-warn">' + esc(S.err[id] || '')
@@ -3114,7 +3162,8 @@ async function boot() {
    *   ⚙ に出した数字で判明）。起動でいちばん要るのは**新着が出ること**です。
    *   そろえ直しは、このあと見張りが静かにやります（10秒後）。 */
   const syncEarly = Promise.all(live.map((src) =>
-    Api.sync(src, true, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))))
+    Api.sync(src, true, haveSaved[src])
+      .then((d) => ({ src, d, ms: Date.now() - bootT0 })).catch((e) => ({ src, e }))))
     .then((r) => { S.bootMs.sync = Date.now() - bootT0; return r; });
   // 受け口の状態も、同じく先に聞いておきます（索引の読み込みと同時に進みます）
   const probeEarly = Promise.all(live.map((src) =>
