@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 84c4fe7599 を版の印に
+ *  ★このファイルは 公開用を作る.py が 954db84b0f を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '84c4fe7599';
+const VERSION = '954db84b0f';
 const CACHE = 'mailboard-' + VERSION;
 
 /* ★公開したものかどうか。
@@ -132,6 +132,30 @@ function kvGet(key) {
   });
 }
 
+/* ★通知といっしょに受け取ったメールの行を、端末にためておきます。
+ *
+ *   受け口は差出人・件名といっしょに**索引と同じ形の行**も返します。
+ *   ここにためておけば、通知から開いた瞬間にアプリが一覧へ出せます
+ *   （前は開いてから受け口に聞き直していて、3.8秒かかっていました。2026-11-23）。
+ *   ★アプリは受け取ったら空にします。ここでは増えすぎないように切るだけです。
+ *   ★どの受け口のぶんかは住所（url）で見分けます。アプリが受け口の id に直します。 */
+const STASH_KEY = 'pushRows';
+const STASH_MAX = 30;                  // ためておく束の数（1回の通知で受け口ごとに1束）
+const STASH_ROWS = 20;                 // 1束の行の数
+const STASH_WAIT_MS = 15000;           // 件名が間に合わなかったあと、行だけ待つ時間
+
+async function stashRows(srcs, all) {
+  const add = [];
+  (all || []).forEach((x, i) => {
+    if (!x || !x.d || !Array.isArray(x.d.rows) || !x.d.rows.length || !srcs[i]) return;
+    add.push({ url: srcs[i].url, rows: x.d.rows.slice(0, STASH_ROWS), at: Date.now() });
+  });
+  if (!add.length) return 0;
+  const old = (await kvGet(STASH_KEY)) || [];
+  await kvSet(STASH_KEY, add.concat(Array.isArray(old) ? old : []).slice(0, STASH_MAX));
+  return add.length;
+}
+
 /** 受け口に「いまの一言」を聞きます。だめなら null */
 async function askBrief(src) {
   try {
@@ -213,6 +237,8 @@ self.addEventListener('push', (e) => {
     const srcs = (await kvGet('pushSrc')) || [];
     const briefP = Promise.all(srcs.map((s) =>
       askBrief(s).then((d) => (d ? { name: s.name, d } : null))));
+    // ★返事が来たら、まず行を端末にためます（上の stashRows の説明）
+    const stashP = briefP.then((all) => stashRows(srcs, all)).catch(() => 0);
     const got = await Promise.race([
       briefP,
       new Promise((r) => setTimeout(() => r(null), WAIT_MS)),
@@ -222,8 +248,14 @@ self.addEventListener('push', (e) => {
       await self.registration.showNotification('新しいメール', Object.assign({
         body: '新着があります', tag: WAIT_TAG, renotify: true,
       }, ICONS));
+      /* ★通知はもう出しませんが、行は**もう少し待って受け取っておきます**。
+       *   開いたときに、すぐ一覧に出せるようにするためです */
+      await Promise.race([stashP, new Promise((r) => setTimeout(r, STASH_WAIT_MS))]);
       return;
     }
+    /* ★通知を出す**前に**、ためておくのを終わらせます。
+     *   出したあとだと、すぐ押されたときにまだ入っていないことがあります */
+    await stashP;
     const live = got.filter((x) => x && x.d && x.d.n);
     /* ★受け口に聞けたぶんだけで数えます。
      *   聞けなかった受け口があっても、聞けたぶんは正しいので付け替えます。

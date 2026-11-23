@@ -357,6 +357,47 @@ function dedupe(rows) {
 }
 
 /** 受け取ったぶんを足して、重複を消して、並べ直します */
+/**
+ * 通知といっしょに届いていた行を、一覧に出します。
+ *
+ * ★通知が来たとき、世話係（sw.js）が受け口から**索引と同じ形の行**を受け取って
+ *   端末にためています。開いた瞬間にここで出せば、受け口に聞き直すのを
+ *   待たずに済みます（前は3.8秒。2026-11-23、ko-dai さんの「通知から開いたら即表示」）。
+ * ★受け取ったら、ためておいた場所は空にします。同じ通があとの取り込みで
+ *   また届いても、番号で重ねずにまとめます（mergeRows）。
+ * ★どの受け口のぶんかは住所で見分けます。いまつないでいない受け口のぶんは捨てます。
+ */
+async function takePushRows() {
+  if (S.demo) return 0;
+  let list;
+  try { list = await Store.get('pushRows'); } catch (e) { return 0; }
+  if (!Array.isArray(list) || !list.length) return 0;
+  try { await Store.set('pushRows', []); } catch (e) { /* 次に開いたときにまた重ねずにまとめます */ }
+  /* ★先に「もう持っている通」を外して、**受け口ごとに1回だけ** mergeRows を呼びます。
+   *   mergeRows は5万行ぜんぶを並べ直すので、通知の束ごとに呼ぶと
+   *   束の数だけ重くなります（たまった束は最大30）。 */
+  const live = Api.live();
+  const have = new Set(S.rows.map((r) => Rules.keyOf(r)));
+  const bySrc = {};
+  list.forEach((x) => {
+    if (!x || !Array.isArray(x.rows) || !x.rows.length) return;
+    const src = live.find((id) => Api.url(id) === x.url);
+    if (!src) return;
+    x.rows.forEach((r) => {
+      if (!Array.isArray(r) || !r[F.ID]) return;
+      r[F.SRC] = src;
+      const k = Rules.keyOf(r);
+      if (have.has(k)) return;
+      have.add(k);
+      (bySrc[src] = bySrc[src] || []).push(r);
+    });
+  });
+  let n = 0;
+  Object.keys(bySrc).forEach((src) => { n += mergeRows(bySrc[src], src); });
+  if (n) { saveSoon(); render(); }
+  return n;
+}
+
 function mergeRows(rows, src) {
   const seen = new Set(S.rows.map((r) => Rules.keyOf(r)));
   let added = 0;
@@ -2869,6 +2910,8 @@ function bootLine() {
   return '<p class="muted small">前の起動：'
     + '索引の読み込み <b>' + sec(b.load) + '</b>'
     + '（' + Number(b.rows || 0).toLocaleString() + '通）'
+    // ★通知といっしょに届いていたぶん。通知から開いたときは、ここで新着が出ています
+    + (b.pushN ? '／<b>通知で先に受け取った ' + b.pushN + '通（' + sec(b.push) + '）</b>' : '')
     + '／受け口の取り込み <b>' + sec(b.sync) + '</b>'
     + '／状態の確認 ' + sec(b.probe)
     + '／<b>新着が出るまで ' + sec(b.done) + '</b>'
@@ -3142,7 +3185,8 @@ async function boot() {
   // ★通知を押して戻ってきたときは、待たずに取り込みます（sw.js から合図が来ます）
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'push-open') syncNew(true);
+      // ★届いていた行を先に出してから、受け口に聞きます（takePushRows の説明）
+      if (e.data && e.data.type === 'push-open') { takePushRows(); syncNew(true); }
     });
   }
   Updater.start();
@@ -3243,6 +3287,14 @@ async function boot() {
     recategorize();
     render();
   } catch (e) { /* はじめてなら空です */ }
+
+  /* ★通知といっしょに届いていた行を、**受け口に聞く前に**出します（takePushRows の説明）。
+   *   通知から開いたときは、ここで新着が出ます。 */
+  try {
+    const np = await takePushRows();
+    S.bootMs.push = Date.now() - bootT0;
+    S.bootMs.pushN = np;
+  } catch (e) { /* 出せなくても、このあとの取り込みで入ります */ }
 
   /* ★新着を画面に渡すのは、ここ1か所です（下で2回呼んでも、渡すのは1回だけ）。
    *
@@ -3370,7 +3422,8 @@ async function boot() {
   await deliverEarly();
   S.bootMs.all = Date.now() - bootT0;      // ぜんぶ終わるまで
   renderScanNote();
-  S.busy = ''; render();
+  // ★⚙ の「前の起動」も描き直します（描き直さないと「ぜんぶ終わるまで」が出ません）
+  S.busy = ''; render(); renderSources();
 }
 
 /* ============================================================
@@ -3823,7 +3876,8 @@ function bindEvents() {
   });
 
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !S.demo) syncNew(true);
+    // ★通知といっしょに届いていた行を先に出します（アイコンから戻ったときも）
+    if (!document.hidden && !S.demo) { takePushRows(); syncNew(true); }
   });
 }
 
