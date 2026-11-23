@@ -1895,7 +1895,9 @@ async function syncNew(quiet, pre) {
      *   ただし、しばらく軽いのが続いたら1回そろえ直します
      *   （Gmail や「メール」アプリで既読にしたぶんを合わせるため）。 */
     const light = !!quiet && (Date.now() - (S.fullAt || 0) < FULL_SYNC_SEC * 1000);
-    if (!light) S.fullAt = Date.now();
+    /* ★「ぜんぶそろえた」と記録するのは、**本当にそろえた返事が来たとき**だけです。
+     *   頼む前に記録していたので、起動を軽いほうに変えたとき、
+     *   そろえていないのに「そろえた」ことになり、未読が5分合いませんでした。 */
     /* ★いま持っている通数を一緒に渡します。
      *   受け口は「今回あたらしく入れたぶん」しか返さないので、
      *   Mac に先を越されたスマホは**何も受け取れず**、
@@ -1923,6 +1925,7 @@ async function syncNew(quiet, pre) {
     //   S.rows は1本しかないので、同時に書き換えると取りこぼします
     const failed = [];
     let dirty = false;                 // 索引を書き直す必要があるか
+    let didFull = false;               // ぜんぶそろえた返事が来たか
     for (const { src, d, e } of got) {
       if (e || !d) {
         // ★転んだ受け口は、名前を控えて必ず知らせます。
@@ -1948,6 +1951,7 @@ async function syncNew(quiet, pre) {
       // ★足りないぶんも同じ返事に入っています（往復が1回ぶん減ります）
       const n1 = mergeRows((d.added || []).concat(d.catchUp || []), src);
       S.lastSync[src].got = n1;          // 実際に増えた数
+      if (!d.light) didFull = true;      // ★そろえた返事だった
       /* ★受け口が「足りないぶん」を最後まで返してくれたなら、
        *   そこまで読んだことになります。覚えておけば、次からは
        *   同じところを取り寄せ直しません。
@@ -2060,6 +2064,7 @@ async function syncNew(quiet, pre) {
     //   前は取り込みのたびに毎回やっていたので、**新着が無くても数秒かかって
     //   いました**（2026-11-19、ko-dai さんの「読み込みに非常に長い時間がかかる」）。
     //   ふだんは何も変わらないので、ほとんどの回はここを通りません。
+    if (didFull) S.fullAt = Date.now();
     if (dirty) saveSoon();          // ★待ちません（上の説明）
     // ★「索引を何行目まで読んだか」も残します（次に開いたときに使います）
     await Store.set('consumed', S.consumed);
@@ -3102,8 +3107,14 @@ async function boot() {
   } catch (e) { /* はじめてなら、ありません */ }
   const bootT0 = Date.now();
   S.bootMs = { at: bootT0 };
+  /* ★起動は**軽いほう**で頼みます。
+   *
+   *   未読・フラグ・返信ずみ・合計をそろえるのに Gmail へ4往復よけいにかかり、
+   *   ko-dai さんのスマホでは**取り込みに5.6秒**かかっていました（2026-11-23、
+   *   ⚙ に出した数字で判明）。起動でいちばん要るのは**新着が出ること**です。
+   *   そろえ直しは、このあと見張りが静かにやります（10秒後）。 */
   const syncEarly = Promise.all(live.map((src) =>
-    Api.sync(src, false, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))))
+    Api.sync(src, true, haveSaved[src]).then((d) => ({ src, d })).catch((e) => ({ src, e }))))
     .then((r) => { S.bootMs.sync = Date.now() - bootT0; return r; });
   // 受け口の状態も、同じく先に聞いておきます（索引の読み込みと同時に進みます）
   const probeEarly = Promise.all(live.map((src) =>
