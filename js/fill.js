@@ -550,7 +550,7 @@ function fillLabel(it) {
   if (/名|人/.test(it.tail || '')) return '人数';
   if (/時|分/.test(it.tail || '')) return '時刻';
   if (/予約番号|confirmation/i.test(s)) return '予約番号';
-  if (/到着|arrive/i.test(s)) return '到着のころ';
+  if (/到着|arrive/i.test(s)) return '到着の頃';
   if (/電話/.test(s) || /\b(phone|tel|mobile)\b/i.test(s)) return '電話番号';
   if (it.kind === 'num') return '人数';
   if (it.kind === 'datetime') return '日時';

@@ -3117,7 +3117,7 @@ async function toggleMuteFromDetail() {
     next = S.mute.filter((w) => hit.indexOf(w) < 0);
   } else {
     if (!confirm((row[F.NAME] || addr) + ' <' + addr + '>\n\n'
-               + 'この差出人のメールは、通知だけ止めます。\nメールは今までどおり一覧に入ります。')) return;
+               + 'この差出人のメールは、通知だけ止めます。\nメールは今まで通り一覧に入ります。')) return;
     next = S.mute.concat([addr]);
   }
   const n = await saveMute(next);
