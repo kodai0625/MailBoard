@@ -612,7 +612,7 @@ function renderFolders() {
 function renderCats() {
   const c = catCounts();
   const all = c.get('') || { n: 0, u: 0 };
-  let h = row('', 'すべて', 'inbox', all.n, all.u, '');
+  let h = row('', '全て', 'inbox', all.n, all.u, '');
 
   // ★箱ごとに使うカテゴリーが違います。会社の箱は8つだけ、
   //   個人と iCloud は今までどおりです（config.js の BOX_CATS）。
@@ -658,7 +658,7 @@ function renderList() {
       ? 'ここには何もありません'
       : (S.demo ? '見本を読み込んでいます'
                : 'まだ索引がありません<br><br>'
-                 + '<button class="pill pill--go" id="emptyGo">設定をひらいて読み込む</button>'))
+                 + '<button class="pill pill--go" id="emptyGo">設定を開いて読み込む</button>'))
       + '</li>';
     const go = $('#emptyGo');
     if (go) go.addEventListener('click', openSettings);
@@ -687,7 +687,7 @@ function renderList() {
     }
     note.hidden = !unknown;
     note.textContent = unknown
-      ? unknown.toLocaleString() + '通は、直接来たのかまわってきたのか分かりません。'
+      ? unknown.toLocaleString() + '通は、直接来たのか回ってきたのか分かりません。'
         + '設定の「作り直す」→「続きを読み込む」で分かるようになります。'
       : '';
   }
@@ -1039,7 +1039,7 @@ async function unsubscribe() {
     S.busy = '止めています…'; render();
     const d = await Api.unsub(String(row[F.SRC] || ''), String(row[F.ID]));
     if (d.mode === 'done') {
-      show('<b>止めました。</b>これから届かなくなります（送り元の処理に少し時間がかかることがあります）');
+      show('<b>止めました。</b>これから届かなくなります（送り元の処理に少し時間が掛かることがあります）');
       toast('配信を止めました');
     } else if (d.mode === 'open') {
       show('こちらからは止められない形でした。'
@@ -1050,7 +1050,7 @@ async function unsubscribe() {
          + '宛先： <code>' + esc(d.to) + '</code> に空のメールを送ると止まります');
     } else {
       show('このメールには、止めるための口が入っていませんでした。'
-         + '本文の下のほうにある「配信停止」のリンクから止めてください');
+         + '本文の下の方にある「配信停止」のリンクから止めてください');
     }
   } catch (e) {
     toast(String(e.message || e), true);
@@ -1490,7 +1490,7 @@ async function sendNew(asDraft) {
   const to = $('#cTo').value.trim();
   const text = $('#cText').value.trim();
   if (!to) { toast('宛先が空です', true); return; }
-  if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+/.test(to)) { toast('宛先のかたちが違うようです', true); return; }
+  if (!/^[^\s@,]+@[^\s@,]+\.[^\s@,]+/.test(to)) { toast('宛先の形が違うようです', true); return; }
   if (!text) { toast('本文が空です', true); return; }
 
   const from = $('#cFromWrap').hidden ? '' : $('#cFrom').value;
@@ -1563,8 +1563,8 @@ function renderAiRow(where) {
   note.value = '';
   note.disabled = !ready && !canHand;
   note.placeholder = (ready || canHand)
-    ? (isNew ? '何を書くか、ひとことで（例：ホテルに予約の確認。感謝も）'
-             : 'どう返すか、ひとことで（例：お礼と、到着は20時ごろ）')
+    ? (isNew ? '何を書くか、一言で（例：ホテルに予約の確認。感謝も）'
+             : 'どう返すか、一言で（例：お礼と、到着は20時頃）')
     : '見本なので使えません';
   go.hidden = !ready;
   if (hand) hand.hidden = !canHand;
@@ -1648,7 +1648,7 @@ async function aiHandoff(where) {
   if (!ok) { toast('コピーできませんでした', true); return; }
   btn.textContent = 'コピーしました';
   setTimeout(() => { btn.textContent = was; }, 2000);
-  toast('Claude アプリをひらいて貼り付け、返ってきた文をここに貼ってください');
+  toast('Claude アプリを開いて貼り付け、返ってきた文をここに貼ってください');
 }
 
 /**
@@ -1764,7 +1764,7 @@ async function scanLoop(src) {
       if (d.inbox) S.inbox[src] = Number(d.inbox);
       S.done[src] = !!d.done;
       renderSources();
-      if (d.done) { toast(nm + 'はぜんぶ読み込みました'); break; }
+      if (d.done) { toast(nm + 'は全部読み込みました'); break; }
       if (!d.added) { toast(nm + 'はこれ以上増えませんでした'); break; }
     }
     S.busy = '索引を受け取っています…'; render();
@@ -2236,7 +2236,7 @@ async function renderPush() {
   const reg = await pushReg();
   if (!reg) {
     note.textContent = 'この画面ではまだ用意ができていません。'
-      + 'いちど開き直してから、もう一度ひらいてください。';
+      + '一度開き直してから、もう一度開いてください。';
     on.hidden = true; off.hidden = true;
     return;
   }
@@ -2274,7 +2274,7 @@ async function renderPush() {
   }
   note.textContent = ng.length
     ? '★' + ng.join('・') + ' の受け口に登録できていません。'
-    : 'この端末は受け取ります（受け口' + live.length + 'つとも登録ずみ）。';
+    : 'この端末は受け取ります（受け口' + live.length + 'つとも登録済み）。';
 }
 
 /**
@@ -2338,7 +2338,7 @@ async function pushTurnOn() {
     }
     const reg = await pushReg();
     if (!reg || !reg.pushManager) {
-      throw new Error('この画面では通知を使えません。いちど開き直してください');
+      throw new Error('この画面では通知を使えません。一度開き直してください');
     }
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
@@ -2615,11 +2615,11 @@ function renderSenders() {
   //   ずらっと並べるだけだと、どこまで手を入れれば十分なのかが
   //   分かりません。上の組を片づければ大半が済む、と見えるようにします。
   const groups = [
-    { id: 'a', name: 'よく来る（10通以上）', hint: 'ここに決まりごとを作ると、いちばん効きます',
+    { id: 'a', name: 'よく来る（10通以上）', hint: 'ここに決まり事を作ると、一番効きます',
       list: rows.filter((v) => v.n >= 10) },
-    { id: 'b', name: 'ときどき（2〜9通）', hint: '',
+    { id: 'b', name: '時々（2〜9通）', hint: '',
       list: rows.filter((v) => v.n >= 2 && v.n < 10) },
-    { id: 'c', name: '1回だけ', hint: '一度きりの相手です。ふつうは触らなくて構いません',
+    { id: 'c', name: '1回だけ', hint: '一度きりの相手です。普通は触らなくて構いません',
       list: rows.filter((v) => v.n === 1) },
   ];
 
@@ -2648,9 +2648,9 @@ function renderSenders() {
       +   '<div class="serow__a">' + esc(v.key) + '</div>'
       + '</div>'
       + '<span class="serow__c">' + v.n.toLocaleString() + '通'
-      +   (v.via ? '<br><span class="serow__v">まわってきた ' + v.via.toLocaleString() + '</span>' : '')
+      +   (v.via ? '<br><span class="serow__v">回ってきた ' + v.via.toLocaleString() + '</span>' : '')
       + '</span>'
-      + '<span class="tag tag--' + k.id + '">' + esc(k.name) + (v.mixed ? ' ほか' : '') + '</span>'
+      + '<span class="tag tag--' + k.id + '">' + esc(k.name) + (v.mixed ? ' 他' : '') + '</span>'
       + '<button class="pill" data-se="' + esc(v.key) + '">分類を決める</button>'
       + '</div>';
   }
@@ -2691,7 +2691,7 @@ async function assignSender(key) {
     await Api.setRules(S.main, Rules.rows());
     await Store.set('rules', Rules.rows());
     toast('「' + key + '」を「' + cats[i].name + '」にしました'
-      + (box ? '（' + folderName(box) + 'に届いたぶんだけ）' : ''));
+      + (box ? '（' + folderName(box) + 'に届いた分だけ）' : ''));
   } catch (e) { toast(String(e.message || e), true); }
 }
 
@@ -2730,7 +2730,7 @@ function openSettings() {
         + names.map((k) => '「' + esc(k) + '」').join('・')
         + ' にしたアドレスだけ、'
         + names.map((k) => catsOf(k).map((c) => (CAT_BY_ID[c] || {}).name || c).join('・')).join(' / ')
-        + ' の棚になります。ほかの呼び名にすると、ふつうの棚に戻ります。'
+        + ' の棚になります。他の呼び名にすると、普通の棚に戻ります。'
       : '';
   }
   $('#addrIn').value = S.myAddrs
@@ -2795,7 +2795,7 @@ function countLine(id, n) {
   let cls = '';
   const head = '／ ' + nm + ' ' + inbox.toLocaleString() + '通　';
   if (!inbox) {
-    note = S.done[id] ? '（古いぶんまで入っています）' : '（まだ途中です）';
+    note = S.done[id] ? '（古い分まで入っています）' : '（まだ途中です）';
   } else if (n < inbox) {
     // ★足りないのは困ります。探しているメールが出てこないので
     note = head + '<b>あと ' + (inbox - n).toLocaleString() + '通 足りません。'
@@ -2807,8 +2807,8 @@ function countLine(id, n) {
     //   以前は少しのずれでも赤字で「押してください」と出していて、
     //   ko-dai さんから「ほぼ毎回出る」と言われました（2026-11-08）。
     const over = n - inbox;
-    note = head + '消した・片づけたメールが ' + over.toLocaleString() + '通 残っています'
-         + '（ひまなときに「点検して直す」で消えます）';
+    note = head + '消した・片付けたメールが ' + over.toLocaleString() + '通 残っています'
+         + '（暇なときに「点検して直す」で消えます）';
     if (over > 100) cls = ' is-warn';
   } else {
     note = head + 'そろっています';
@@ -2835,17 +2835,17 @@ function syncLine(src) {
   const t = new Date(d.at);
   const hh = String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')
            + ':' + String(t.getSeconds()).padStart(2, '0');
-  return '<p class="muted small">前の取り込み ' + hh + (d.light ? '（軽い）' : '（ぜんぶ）')
+  return '<p class="muted small">前の取り込み ' + hh + (d.light ? '（軽い）' : '（全部）')
     + '／手元 ' + Number(d.have || 0).toLocaleString() + '通'
     + '／受け口 ' + Number(d.indexed || 0).toLocaleString() + '通'
     + '／新しく ' + d.added + '通'
-    + '／足りないぶん ' + d.catchUp + '通'
+    + '／足りない分 ' + d.catchUp + '通'
     + '／<b>増えた ' + (d.got === undefined ? '—' : d.got) + '通</b>'
-    + (d.ms ? '／かかった ' + timeParts(d) : '')
+    + (d.ms ? '／掛かった ' + timeParts(d) : '')
     + '</p>'
     + stepsLine(d.steps)
     + (S.ping[src] && S.ping[src].ms
-      ? '<p class="muted small">見張りの1回（いちばん軽い問い合わせ）：' + timeParts(S.ping[src]) + '</p>'
+      ? '<p class="muted small">見張りの1回（一番軽い問い合わせ）：' + timeParts(S.ping[src]) + '</p>'
       : '');
 }
 
@@ -2895,7 +2895,7 @@ function timeParts(d) {
     parts.push('行き帰り ' + sec(Math.max(0, d.net - srv)));
     parts.push('手元 ' + sec(Math.max(0, total - d.net)));
   } else {
-    parts.push('そのほか ' + sec(Math.max(0, total - srv)));
+    parts.push('その他 ' + sec(Math.max(0, total - srv)));
   }
   return head + '（' + parts.join('＋') + '）';
 }
@@ -2922,7 +2922,7 @@ function bootLine() {
     + (b.pushN
       ? '／受け口と合わせ終わるまで ' + sec(b.done)
       : '／<b>新着が出るまで ' + sec(b.done) + '</b>')
-    + (b.all !== undefined ? '／ぜんぶ終わるまで ' + sec(b.all) : '')
+    + (b.all !== undefined ? '／全部終わるまで ' + sec(b.all) : '')
     + '</p>';
 }
 
@@ -2999,17 +2999,17 @@ function renderSources() {
                 +   ' placeholder="受け口に確かめています…" value="">'
                 +   '<button class="pill" data-act="query" disabled>覚える</button></div>')
             + '<p class="muted small">'
-            +   'ふつうは <b>in:inbox</b>（受信トレイ）のままで結構です。'
-            +   '転送で届くぶん（受信トレイに残らないこともあります）や、'
-            +   'iCloud から写したぶんも読むなら、こうします。'
+            +   '普通は <b>in:inbox</b>（受信トレイ）のままで結構です。'
+            +   '転送で届く分（受信トレイに残らないこともあります）や、'
+            +   'iCloud から写した分も読むなら、こうします。'
             +   (cloudReady()
                   ? '<br><b class="q">' + esc(cloudQuery(id)) + '</b>'
                     + '<button class="link" data-act="qcloud">これを入れる</button>'
                   : '<br><b class="is-warn">つながっていない受け口があるので、'
                     + '見本はまだ出せません。</b>'
-                    + 'ぜんぶつないでからにしてください。'
+                    + '全部つないでからにしてください。'
                     + '（つながっていないアドレスを「受け口の無いアドレス」と'
-                    + '取り違えて、別の受け口のぶんまで読みにいってしまうためです）')
+                    + '取り違えて、別の受け口の分まで読みに行ってしまうためです）')
             + '</p>'
           : '')
       + (on
@@ -3113,7 +3113,7 @@ async function toggleMuteFromDetail() {
     //   ほかの差出人の通知も一緒に戻るので、何を外すかを見せます
     const hit = S.mute.filter((w) => mutedRow(row, [w]));
     if (!confirm('次の書き方を「通知しない差出人」から外します。\n\n' + hit.join('\n')
-               + '\n\nこの書き方に当たるほかの差出人も、通知が戻ります。')) return;
+               + '\n\nこの書き方に当たる他の差出人も、通知が戻ります。')) return;
     next = S.mute.filter((w) => hit.indexOf(w) < 0);
   } else {
     if (!confirm((row[F.NAME] || addr) + ' <' + addr + '>\n\n'
@@ -3172,7 +3172,7 @@ function renderRules() {
     '<div class="rule" data-i="' + i + '">'
     + '<span class="tag tag--' + esc(r.cat) + '">' + esc((CAT_BY_ID[r.cat] || {}).name || r.cat) + '</span>'
     + '<span class="rule__k">' + esc(kindName(r.kind)) + '</span>'
-    + '<span class="rule__p">' + esc(r.pattern || '（すべて）')
+    + '<span class="rule__p">' + esc(r.pattern || '（全て）')
     +   (r.box ? '<span class="rule__b">' + esc(folderName(r.box)) + 'だけ</span>' : '')
     // ★その箱に無いカテゴリーを指していたら教えます。黙って
     //   効かないままだと「入れたのに動かない」と悩むことになります
@@ -3229,10 +3229,10 @@ function renderBuiltIn() {
     const cats = catsOf(b).filter((c) => c !== 'other')
       .map((c) => (CAT_BY_ID[c] || {}).name || c).join('・');
     return '<p class="muted">' + esc(folderName(b)) + ' の箱には、'
-      + BOX_RULES[folderName(b)].length + '件の決まりごとがはじめから入っています（'
+      + BOX_RULES[folderName(b)].length + '件の決まり事が初めから入っています（'
       + esc(cats) + '）。ここには並べていません。<br>'
       + '仕入先や取引先は会社ごとに違うので、一覧の「差出人」から足してください。'
-      + '<b>自分で足したもののほうが先に効きます。</b></p>';
+      + '<b>自分で足したものの方が先に効きます。</b></p>';
   }).join('');
 }
 
@@ -3264,7 +3264,7 @@ async function saveRules() {
   try {
     await Api.setRules(S.main, Rules.rows());
     recategorize(); render();
-    toast('決まりごとを保存しました');
+    toast('決まり事を保存しました');
   } catch (e) { toast(String(e.message || e), true); }
 }
 
@@ -3743,8 +3743,8 @@ function bindEvents() {
     //   いまどれなのかは、ボタンの文字そのものに出します
     S.toMe = S.toMe === '' ? 'direct' : S.toMe === 'direct' ? 'via' : '';
     const b = $('#toMeBtn');
-    b.textContent = S.toMe === 'direct' ? '自分あて'
-                  : S.toMe === 'via' ? 'まわってきた' : '宛先';
+    b.textContent = S.toMe === 'direct' ? '自分宛て'
+                  : S.toMe === 'via' ? '回ってきた' : '宛先';
     b.classList.toggle('is-on', !!S.toMe);
     S.shown = APP.pageSize; render();
   });
@@ -3823,8 +3823,8 @@ function bindEvents() {
       if (!q) { toast('からにはできません', true); return; }
       if (q === (S.query[src] || '')) { toast('もう同じです'); return; }
       if (!confirm('読み込む範囲を変えます。\n\n' + q + '\n\n'
-                 + 'このあと「続きを読み込む」を押すと、増えたぶんが入ります。'
-                 + 'すでに入っているものはそのままです。')) return;
+                 + 'この後「続きを読み込む」を押すと、増えた分が入ります。'
+                 + '既に入っているものはそのままです。')) return;
       try {
         S.busy = '変えています…'; render();
         const d = await Api.setQuery(src, q);
@@ -3865,7 +3865,7 @@ function bindEvents() {
     }
     if (b.dataset.act === 'rebuild') {
       if (!confirm(srcName(src) + 'の索引を作り直します。\nメールは消えません。'
-                 + '読み込みに時間がかかります。よろしいですか？')) return;
+                 + '読み込みに時間が掛かります。よろしいですか？')) return;
       try {
         await Api.rebuild(src);
         S.rows = S.rows.filter((r) => String(r[F.SRC]) !== src);
@@ -3954,7 +3954,7 @@ function bindEvents() {
   on('#syncBtn', 'click', async () => {
     if (S.demo) { toast('見本なので取り込めません'); return; }
     if (!Api.live().length) { toast('先に受け口をつないでください', true); return; }
-    if (S.scanning) { toast('いま古いメールを読み込んでいます'); return; }
+    if (S.scanning) { toast('今、古いメールを読み込んでいます'); return; }
     if (S.syncing) return;                 // 二度押し防止
     S.syncing = 1;
     $('#syncBtn').classList.add('is-spin');

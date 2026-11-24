@@ -49,7 +49,7 @@ const AI = {
     if (!t) return { ok: false, why: '合言葉（?t=…）が入っていません。Hub Board の設定の QR をそのまま貼ってください' };
     // ★公開版（https）から http の Hub Board は呼べません。ブラウザが止めます
     if (location.protocol === 'https:' && u.protocol === 'http:') {
-      return { ok: false, why: 'この画面は https なので、Hub Board も https の住所（Tailscale Serve のほう）にしてください' };
+      return { ok: false, why: 'この画面は https なので、Hub Board も https の住所（Tailscale Serve の方）にしてください' };
     }
     this.set('url', u.origin);
     this.set('token', t);
@@ -134,6 +134,8 @@ const AI = {
    * Claude に渡す頼み文を組み立てます。
    * m は AI.write に渡すものと同じ形です。
    */
+  /* ★この頼む文は Claude に渡す文で、画面には出ません。Hub Board（Sources/MailWrite.swift）と
+   *   **同じ言い回しのまま**にしています（2026-11-24 に画面の文を漢字に直したときも、ここは変えていません）。 */
   prompt(m) {
     const v = (k) => String((m && m[k]) || '').trim();
     const isNew = v('mode') === 'new';

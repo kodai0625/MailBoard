@@ -16,7 +16,7 @@ const APP = {
 
   // 受け口のコードの版の印。版の印をつける.py が書き込みます。
   // これと受け口の印が違うと、アプリが「古いままです」と出します
-  gasVersion: '9b0c32c5',
+  gasVersion: '3d60794a',
 
   // 索引を受け取るときの小分けの大きさ
   pullChunk: 2000,
@@ -113,7 +113,7 @@ const CATS = [
 
   /* ★「その他」はいちばん最後に置きます。どの決まりごとにも
      当たらなかったものの行き先なので、途中にあると落ち着きません */
-  { id: 'other',  name: 'その他',    icon: 'dots',  hint: 'どの決まりごとにも当たらなかったもの' },
+  { id: 'other',  name: 'その他',    icon: 'dots',  hint: 'どの決まり事にも当たらなかったもの' },
 ];
 
 const CAT_BY_ID = Object.fromEntries(CATS.map((c) => [c.id, c]));

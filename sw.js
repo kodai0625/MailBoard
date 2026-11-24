@@ -18,11 +18,11 @@
  *    印も変わります。つまり古い控えが混ざる心配がないので、
  *    控えがあればそれをそのまま使います（起動が速くなります）。
  *
- *  ★このファイルは 公開用を作る.py が 55288a9d7f を版の印に
+ *  ★このファイルは 公開用を作る.py が abb3d9f7c9 を版の印に
  *    書き換えてから公開されます。
  * ============================================================ */
 
-const VERSION = '55288a9d7f';
+const VERSION = 'abb3d9f7c9';
 const CACHE = 'mailboard-' + VERSION;
 
 /* ★公開したものかどうか。
@@ -306,7 +306,7 @@ self.addEventListener('push', (e) => {
         }, ICONS));
     }
     if (fresh.length > show.length) {
-      await self.registration.showNotification('ほか ' + (fresh.length - show.length) + '通', Object.assign({
+      await self.registration.showNotification('他 ' + (fresh.length - show.length) + '通', Object.assign({
         body: '新しいメールが届いています', tag: 'mailboard-more', renotify: true,
       }, ICONS));
     }

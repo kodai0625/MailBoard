@@ -126,7 +126,7 @@ const Rules = {
 
     for (let i = 0; i < list.length; i++) {
       const r = list[i];
-      const only = (r.box && !r.built) ? '（' + r.box + ' に届いたぶん）' : '';
+      const only = (r.box && !r.built) ? '（' + r.box + ' に届いた分）' : '';
 
       if (r.kind === 'from') {
         if (r.pattern && from.indexOf(r.pattern) >= 0) {
@@ -156,6 +156,6 @@ const Rules = {
         }
       }
     }
-    return { cat: 'other', why: 'どの決まりごとにも当たりませんでした' };
+    return { cat: 'other', why: 'どの決まり事にも当たりませんでした' };
   },
 };

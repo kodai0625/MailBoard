@@ -21,12 +21,12 @@ function 読めるエラーに(msg) {
   if (/has not been used in project|accessNotConfigured|SERVICE_DISABLED/.test(t)) {
     return 'Gmail API がまだ使える状態になっていません。\n'
          + 'Apps Script を開いて、左の「サービス」の ＋ から '
-         + '「Gmail API」を足してください。そのあともう一度どうぞ。';
+         + '「Gmail API」を足してください。その後もう一度どうぞ。';
   }
   if (/urlfetch|1日にサービス|too many times for one day|Service invoked too many times for one day/.test(t)) {
-    return '今日ぶんの通信回数を使い切りました。\n'
-         + 'Apps Script には1日の上限（ふつうの Google アカウントで2万回）が'
-         + 'あります。日本時間の夕方16時ごろに戻るので、そのあと'
+    return '今日分の通信回数を使い切りました。\n'
+         + 'Apps Script には1日の上限（普通の Google アカウントで2万回）が'
+         + 'あります。日本時間の夕方16時頃に戻るので、その後'
          + '「続きを読み込む」を押してください。読んだところまでは残っています。';
   }
   if (/まとめ口/.test(t)) {
@@ -36,14 +36,14 @@ function 読めるエラーに(msg) {
     // ★元の文も短く添えます。言い換えだけだと、どこで断られたのかが
     //   分からず、直しようがありませんでした
     return 'Google 側が「少し急ぎすぎ」と言っています。'
-         + '2〜3分おいて、もう一度どうぞ。読んだところまでは残っています。\n'
+         + '2〜3分置いて、もう一度どうぞ。読んだところまでは残っています。\n'
          + '（元の言い分： ' + t.slice(0, 140) + '）';
   }
   // ★受け口のコードが古いままだと、決まりごとの保存だけがここで
   //   こけます。「列の数が合いません」という Google の文だけでは
   //   何をすればいいのか分からないので、やることを書きます
   if (/number of columns|does not match the number of columns|列数/.test(t)) {
-    return '受け口のコードが古いままです。決まりごとの保存だけができません。\n'
+    return '受け口のコードが古いままです。決まり事の保存だけができません。\n'
          + '「コードをコピー.command」を押して Apps Script に貼り直し、'
          + '「デプロイを管理」から新しいバージョンで出し直してください。\n'
          + '（仕分けそのものはアプリの中で動いているので、'
@@ -54,7 +54,7 @@ function 読めるエラーに(msg) {
          + '「準備する」を1回動かし、許可し直してください。';
   }
   if (/Exceeded maximum execution time/.test(t)) {
-    return '1回ぶんの時間を使いきりました。'
+    return '1回分の時間を使いきりました。'
          + 'もう一度「続きを読み込む」を押すと、続きから始まります。';
   }
   if (/exception|internal error|Service invoked too many times/i.test(t)) {
