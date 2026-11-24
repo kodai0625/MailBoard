@@ -1077,9 +1077,10 @@ function paintBody() {
     $('#dBody').srcdoc = wrapBody(
       '<p style="color:#888;font-size:13px">日本語にしました'
       + (tr.cut ? '（長いので途中までです）' : '') + '</p>'
-      + '<pre>' + esc(tr.text || '') + '</pre>', false);
+      + '<pre>' + linkifyText(tr.text || '') + '</pre>', false);
   } else {
-    $('#dBody').srcdoc = wrapBody(d.html || ('<pre>' + esc(d.text || '') + '</pre>'), S.images);
+    // ★URL を押せるようにします（splitUrls の説明）
+    $('#dBody').srcdoc = wrapBody(d.html ? linkifyHtml(d.html) : ('<pre>' + linkifyText(d.text || '') + '</pre>'), S.images);
   }
   $('#imgBtn').hidden = S.images || !!tr;
   paintTransBtn();
@@ -1216,6 +1217,88 @@ function fromList() {
   return pick((MY_ADDRS || []).map((m) => m.addr));
 }
 
+/* ============================================================
+ *  本文の中の URL を押せるようにする（2026-11-24、ko-dai さんの「メールに URL があったら開けるように」）
+ *
+ *  ★文字だけのメールは <pre> にそのまま出していたので、URL が**ただの字**で押せませんでした。
+ *  ★HTML のメールでも、リンクになっていない URL（字で書いてあるだけ）は押せませんでした。
+ *  ★開く先は今までどおり新しい窓（Safari）です（下の wrapBody の <base target="_blank">）。
+ * ========================================================== */
+/* URL の終わりは、空白・日本語の字・全角の字・かっこや引用符の手前までにします */
+const URL_RX = /(?:https?:\/\/|www\.)[^\s<>"'`\u3000-\u30ff\u3400-\u9fff\uf900-\ufaff\uff00-\uffef]+/gi;
+
+/** 文を「URL」と「それ以外」に分けます。URL には開く先（href）を付けます */
+function splitUrls(text) {
+  const t = String(text == null ? '' : text);
+  const out = [];
+  let last = 0;
+  URL_RX.lastIndex = 0;
+  let m;
+  while ((m = URL_RX.exec(t))) {
+    let u = m[0];
+    // ★文の終わりの句読点・閉じかっこは URL に入れません（「…/page.」「(…/page)」）
+    while (/[.,;:!?)\]}'"]$/.test(u)) {
+      const c = u.slice(-1);
+      if (c === ')' && (u.split('(').length > u.split(')').length - 1)) break;   // (…) の対は残す
+      u = u.slice(0, -1);
+    }
+    if (u.length < 8) continue;
+    const start = m.index, end = start + u.length;
+    if (start > last) out.push({ text: t.slice(last, start) });
+    out.push({ text: u, href: /^www\./i.test(u) ? 'https://' + u : u });
+    last = end;
+    URL_RX.lastIndex = end;
+  }
+  if (last < t.length) out.push({ text: t.slice(last) });
+  return out;
+}
+
+/** 文字だけの本文を、URL を押せる HTML にします（ほかの字はすべて逃がします） */
+function linkifyText(text) {
+  return splitUrls(text).map((p) => (p.href
+    ? '<a href="' + esc(p.href) + '" rel="noopener noreferrer">' + esc(p.text) + '</a>'
+    : esc(p.text))).join('');
+}
+
+/**
+ * HTML の本文の中で、リンクになっていない URL をリンクにします。
+ * ★DOMParser で読むだけなので、中の script は動きません（読むだけの文書になります）。
+ * ★すでにリンクの中の字・script・style の中は触りません。うまく読めなければ元のまま返します。
+ */
+function linkifyHtml(html) {
+  const src = String(html || '');
+  if (!/(?:https?:\/\/|www\.)/i.test(src) || typeof DOMParser === 'undefined') return src;
+  try {
+    const doc = new DOMParser().parseFromString(src, 'text/html');
+    const walker = doc.createTreeWalker(doc.body, 4 /* NodeFilter.SHOW_TEXT */);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    let changed = 0;
+    nodes.forEach((n) => {
+      const v = n.nodeValue || '';
+      if (!/(?:https?:\/\/|www\.)/i.test(v)) return;
+      const pe = n.parentElement;
+      if (pe && pe.closest('a,script,style,textarea,title,button')) return;
+      const parts = splitUrls(v);
+      if (!parts.some((p) => p.href)) return;
+      const frag = doc.createDocumentFragment();
+      parts.forEach((p) => {
+        if (!p.href) { frag.appendChild(doc.createTextNode(p.text)); return; }
+        const a = doc.createElement('a');
+        a.setAttribute('href', p.href);
+        a.setAttribute('rel', 'noopener noreferrer');
+        a.textContent = p.text;
+        frag.appendChild(a);
+      });
+      n.parentNode.replaceChild(frag, n);
+      changed++;
+    });
+    return changed ? doc.documentElement.innerHTML : src;
+  } catch (e) {
+    return src;
+  }
+}
+
 function wrapBody(html, images) {
   const csp = images
     ? "default-src 'none'; style-src 'unsafe-inline'; img-src https: data: cid:;"
@@ -1239,6 +1322,8 @@ function wrapBody(html, images) {
     + 'word-break:break-word;overflow-wrap:anywhere;touch-action:manipulation;}'
     + 'img{max-width:100%;height:auto;}table{max-width:100%;}'
     + 'pre{white-space:pre-wrap;font:inherit;}'
+    // ★文字だけのメールで押せるようにした URL（linkifyText）の色。HTML のメールの色には触りません
+    + 'pre a{color:#1757b8;text-decoration:underline;word-break:break-all;}'
     + '@media (prefers-color-scheme:dark){html,body{background:#fff;color:#1a1d1a;}}'
     + '</style></head><body>' + html + '</body></html>';
 }
