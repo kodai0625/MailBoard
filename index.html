@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="5499da4ea0">
+<meta name="app-version" content="55288a9d7f">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=5499da4ea0">
-<link rel="stylesheet" href="css/design.css?v=5499da4ea0">
+<link rel="stylesheet" href="css/style.css?v=55288a9d7f">
+<link rel="stylesheet" href="css/design.css?v=55288a9d7f">
 </head>
 <body>
 
@@ -161,6 +161,8 @@
   <div class="sheet__meta">
     <h2 id="dSubj"></h2>
     <div class="meta__l"><span id="dFrom"></span></div>
+    <!-- ★この差出人の通知だけを止めます（メールは一覧に入ります）。2026-11-24 -->
+    <div class="meta__l"><button class="link small" id="muteBtn" hidden>この差出人は通知しない</button></div>
     <div class="meta__l"><span id="dDate"></span></div>
     <div class="meta__l" id="dCat"></div>
     <!-- ★ここで出すのは**外から取ってくる画像**だけです。
@@ -424,6 +426,14 @@
         <button class="pill" id="pushLog">届いたか見る</button>
       </div>
       <pre class="pushlog" id="pushLogBox" hidden></pre>
+      <!-- ★通知しない差出人（2026-11-24、ko-dai さんの「RECRUIT info からのメールのみ通知を外せますか」） -->
+      <label class="lbl" for="muteBox">通知しない差出人</label>
+      <textarea id="muteBox" rows="3" placeholder="1行に1つ（差出人の名前かアドレスの一部）&#10;例）RECRUIT info"></textarea>
+      <div class="row"><button class="pill" id="muteSave">覚える</button></div>
+      <p class="muted small">ここに書いた差出人のメールは、<b>通知だけ</b>止めます。
+        メールは今までどおり一覧に入ります。差出人の名前かアドレスに、書いた文字が
+        含まれていれば止まります（大文字・小文字は見ません）。
+        メールを開いた画面の「この差出人は通知しない」からも足せます。</p>
       <p class="muted small">★通知に<b>メールの中身は入っていません</b>。
         「変わったよ」の合図だけが届き、件名と差出人は端末が受け口に聞きに行きます。
         Apple や Google の通知の道を、中身が通りません。</p>
@@ -450,13 +460,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=5499da4ea0"></script>
-<script src="js/store.js?v=5499da4ea0"></script>
-<script src="js/api.js?v=5499da4ea0"></script>
-<script src="js/update.js?v=5499da4ea0"></script>
-<script src="js/rules.js?v=5499da4ea0"></script>
-<script src="js/ai.js?v=5499da4ea0"></script>
-<script src="js/fill.js?v=5499da4ea0"></script>
-<script src="js/app.js?v=5499da4ea0"></script>
+<script src="js/config.js?v=55288a9d7f"></script>
+<script src="js/store.js?v=55288a9d7f"></script>
+<script src="js/api.js?v=55288a9d7f"></script>
+<script src="js/update.js?v=55288a9d7f"></script>
+<script src="js/rules.js?v=55288a9d7f"></script>
+<script src="js/ai.js?v=55288a9d7f"></script>
+<script src="js/fill.js?v=55288a9d7f"></script>
+<script src="js/app.js?v=55288a9d7f"></script>
 </body>
 </html>

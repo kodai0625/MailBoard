@@ -78,6 +78,8 @@ const S = {
    *   そのとき「版が違います（印なし）」「まだ途中です」と**うその知らせ**が出て、
    *   読み込む範囲も in:inbox に見えていました（ko-dai さんの画面で判明）。 */
   probed: {},
+  mute: [],           // 通知しない差出人（受け口から。muteNorm の説明）
+  muteDirty: false,   // ⚙ の欄を書きかけているか（描き直しで消さないため）
   replied: new Set(),  // 返信ずみのやり取り（受け口id:やり取りの番号）
   bodies: new Map(),  // 本文の控え。開いているあいだだけ、30通まで
   group: true,        // 同じやり取りを1行にまとめるか
@@ -925,6 +927,7 @@ async function openMail(key) {
     + '<span class="why">' + esc(why) + '</span>';
   paintStarBtn();
   paintThread(row);
+  paintMuteBtn(row, isSent);         // ★この差出人は通知しない（2026-11-24）
   // ★配信停止のボタンは、機械が送ってきたものにだけ出します。
   //   人からのメールに「配信を止める」が並んでいると落ち着きません
   const ub = $('#unsubBtn');
@@ -3020,6 +3023,108 @@ function renderSources() {
           : '')
       + '</div>';
   }).join('');
+  renderMute();
+}
+
+/* ============================================================
+ *  通知しない差出人（2026-11-24）
+ *
+ *  ★止めるのは**通知だけ**です。メールは今までどおり一覧に入ります
+ *    （ko-dai さんの「RECRUIT info からのメールのみ通知を外せますか」）。
+ *  ★見分けるのは受け口です（通知を送るかどうかを決めるのが受け口なので）。
+ *    ここでは一覧を書いて、つないでいる受け口ぜんぶに同じものを送ります。
+ *  ★受け口と同じ決まりでそろえます（gas/コード.gs の muteNorm_ / mutedFrom_）。
+ * ========================================================== */
+function muteNorm(list) {
+  const src = Array.isArray(list) ? list : String(list == null ? '' : list).split(/\r?\n/);
+  const seen = new Set();
+  const out = [];
+  src.forEach((w) => {
+    const t = String(w == null ? '' : w).trim().toLowerCase().slice(0, 200);
+    if (!t || seen.has(t)) return;
+    seen.add(t);
+    out.push(t);
+  });
+  return out.slice(0, 100);
+}
+
+/** その行の差出人が、一覧に当たるか（受け口の mutedFrom_ と同じ見かた） */
+function mutedRow(row, list) {
+  const t = (String(row[F.NAME] || '') + ' <' + String(row[F.FROM] || '') + '>').toLowerCase();
+  return (list || S.mute).some((w) => w && t.indexOf(w) >= 0);
+}
+
+/** 受け口ぜんぶの状態を確かめ終わったか（終わる前に書くと、知らない一覧で上書きします） */
+function muteReady() {
+  const live = Api.live();
+  return live.length > 0 && live.every((src) => S.probed[src]);
+}
+
+function renderMute() {
+  const box = $('#muteBox');
+  if (!box) return;
+  const ready = muteReady();
+  box.disabled = !ready;
+  const btn = $('#muteSave');
+  if (btn) btn.disabled = !ready;
+  if (!ready) { box.value = ''; S.muteDirty = false; return; }
+  // ★書きかけのときは描き直しません（⚙ はたびたび描き直すので、消えてしまいます）
+  if (S.muteDirty || document.activeElement === box) return;
+  box.value = S.mute.join('\n');
+}
+
+/** 一覧を受け口ぜんぶに送ります。送れた受け口の数を返します */
+async function saveMute(list) {
+  if (!muteReady()) { toast('受け口に確かめ終わってから変えてください'); return 0; }
+  const next = muteNorm(list);
+  const live = Api.live();
+  const ng = [];
+  await Promise.all(live.map((src) =>
+    Api.post(src, 'setMute', { list: next }).catch(() => { ng.push(srcName(src)); })));
+  if (ng.length === live.length) {
+    // ★どこにも送れなかったときは、手元も変えません（受け口と食い違うため）
+    toast('送れませんでした。受け口のコードを貼り替えてデプロイしてください', true);
+    return 0;
+  }
+  S.mute = next;
+  S.muteDirty = false;
+  renderMute();
+  if (ng.length) toast(ng.join('・') + ' には送れませんでした（受け口のコードが古いかもしれません）', true);
+  return live.length - ng.length;
+}
+
+/** 開いているメールの「この差出人は通知しない」のボタン */
+function paintMuteBtn(row, isSent) {
+  const b = $('#muteBtn');
+  if (!b) return;
+  b.hidden = S.demo || isSent || !row || !muteReady();
+  if (b.hidden) return;
+  b.textContent = mutedRow(row) ? 'この差出人の通知を戻す' : 'この差出人は通知しない';
+}
+
+async function toggleMuteFromDetail() {
+  const row = rowByKey(S.openKey);
+  if (!row) return;
+  const addr = String(row[F.FROM] || '').trim().toLowerCase();
+  if (!addr) { toast('差出人のアドレスが分かりません', true); return; }
+  let next;
+  if (mutedRow(row)) {
+    // ★当たっている書き方を外します。名前の一部で書いてあると、
+    //   ほかの差出人の通知も一緒に戻るので、何を外すかを見せます
+    const hit = S.mute.filter((w) => mutedRow(row, [w]));
+    if (!confirm('次の書き方を「通知しない差出人」から外します。\n\n' + hit.join('\n')
+               + '\n\nこの書き方に当たるほかの差出人も、通知が戻ります。')) return;
+    next = S.mute.filter((w) => hit.indexOf(w) < 0);
+  } else {
+    if (!confirm((row[F.NAME] || addr) + ' <' + addr + '>\n\n'
+               + 'この差出人のメールは、通知だけ止めます。\nメールは今までどおり一覧に入ります。')) return;
+    next = S.mute.concat([addr]);
+  }
+  const n = await saveMute(next);
+  if (n) {
+    toast(mutedRow(row) ? '通知を止めました' : '通知を戻しました');
+    paintMuteBtn(row, false);
+  }
 }
 
 /**
@@ -3353,6 +3458,7 @@ async function boot() {
     const probes = await probeEarly;
 
     let main = null;
+    const muteAll = new Set();          // ★通知しない差出人（受け口ぜんぶのぶんを合わせます）
     for (const { src, p, e } of probes) {
       if (e || !p) {
         S.ok[src] = false;
@@ -3368,6 +3474,7 @@ async function boot() {
       S.query[src] = String(p.query || 'in:inbox');
       S.ver[src] = String(p.version || '');
       S.done[src] = !!p.backfillDone;
+      (Array.isArray(p.mute) ? p.mute : []).forEach((w) => muteAll.add(String(w)));
       S.probed[src] = true;              // ★ここから先は、版・範囲・途中かどうかを出してよい
       S.ok[src] = true;
       S.err[src] = '';
@@ -3383,6 +3490,7 @@ async function boot() {
       throw new Error(S.err[live[0]] || 'どの受け口からも返事がありません');
     }
     S.aliases = aliases;
+    S.mute = muteNorm(Array.from(muteAll));
     await Store.set('hosts', S.hosts);
 
     // ★古い受け口は full を知らないので、そのときだけ今までどおり別に聞きます
@@ -3832,6 +3940,13 @@ function bindEvents() {
   on('#autoTrans', 'change', (e) => setAutoTrans(e.target.checked));
   on('#pushAgain', 'click', pushTurnOn);
   on('#pushLog', 'click', showPushLog);
+  // ★通知しない差出人（2026-11-24）
+  on('#muteBox', 'input', () => { S.muteDirty = true; });
+  on('#muteSave', 'click', async () => {
+    const n = await saveMute($('#muteBox').value);
+    if (n) toast('通知しない差出人を覚えました（' + S.mute.length + '件）');
+  });
+  on('#muteBtn', 'click', toggleMuteFromDetail);
   on('#pushOn', 'click', pushTurnOn);
   on('#pushOff', 'click', pushTurnOff);
 
