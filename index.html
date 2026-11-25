@@ -21,7 +21,7 @@
 <title>Mail Board</title>
 <!-- ★版の印。公開する.py が中身から計算して入れます。
      手元でそのまま開いたときは空で、更新の知らせは出ません。 -->
-<meta name="app-version" content="f1629d9ce3">
+<meta name="app-version" content="dcb40c8d45">
 <script>
 /* 画面が描かれる前に明暗を決めます。
    ここを後回しにすると、暗い設定の端末で一瞬だけ白い画面が出ます。 */
@@ -40,8 +40,8 @@
 </script>
 <!-- ★ ?v= は「読み込み直させるための版番号」です。
      css か js を直したら、ここの数字をすべて同じ値に1つ上げてください。 -->
-<link rel="stylesheet" href="css/style.css?v=f1629d9ce3">
-<link rel="stylesheet" href="css/design.css?v=f1629d9ce3">
+<link rel="stylesheet" href="css/style.css?v=dcb40c8d45">
+<link rel="stylesheet" href="css/design.css?v=dcb40c8d45">
 </head>
 <body>
 
@@ -161,6 +161,8 @@
   <div class="sheet__meta">
     <h2 id="dSubj"></h2>
     <div class="meta__l"><span id="dFrom"></span></div>
+    <!-- ★どのアドレス宛てに届いたか・転送で回ってきたか（2026-11-25） -->
+    <div class="meta__l" id="dTo" hidden></div>
     <!-- ★この差出人の通知だけを止めます（メールは一覧に入ります）。2026-11-24 -->
     <div class="meta__l"><button class="link small" id="muteBtn" hidden>この差出人は通知しない</button></div>
     <div class="meta__l"><span id="dDate"></span></div>
@@ -460,13 +462,13 @@
 
 <div class="toast" id="toast"></div>
 
-<script src="js/config.js?v=f1629d9ce3"></script>
-<script src="js/store.js?v=f1629d9ce3"></script>
-<script src="js/api.js?v=f1629d9ce3"></script>
-<script src="js/update.js?v=f1629d9ce3"></script>
-<script src="js/rules.js?v=f1629d9ce3"></script>
-<script src="js/ai.js?v=f1629d9ce3"></script>
-<script src="js/fill.js?v=f1629d9ce3"></script>
-<script src="js/app.js?v=f1629d9ce3"></script>
+<script src="js/config.js?v=dcb40c8d45"></script>
+<script src="js/store.js?v=dcb40c8d45"></script>
+<script src="js/api.js?v=dcb40c8d45"></script>
+<script src="js/update.js?v=dcb40c8d45"></script>
+<script src="js/rules.js?v=dcb40c8d45"></script>
+<script src="js/ai.js?v=dcb40c8d45"></script>
+<script src="js/fill.js?v=dcb40c8d45"></script>
+<script src="js/app.js?v=dcb40c8d45"></script>
 </body>
 </html>

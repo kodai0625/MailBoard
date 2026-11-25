@@ -327,6 +327,39 @@ function toMeOf(row) {
   return 'via';
 }
 
+/**
+ * 開いたメールが**どのアドレス宛てに届いたか**を1行にします（2026-11-25、ko-dai さんの
+ * 「どのアドレス宛に届いたか分かるように。会社用は転送されて来たメールが多いので、転送も分かるように」）。
+ *
+ *   宛先（To・Cc）  … メールに書いてある宛先（索引の RCPT）
+ *   届いた先        … 実際に届いた受信箱（Delivered-To。索引の ADDR）
+ *
+ * ★届いた先が宛先に書かれていなければ、**転送（またはグループ・Bcc）で回ってきた**メールです。
+ *   会社のアドレスあての共有アドレス（info@ など）からの転送も、ここで分かります。
+ * ★索引だけで決めるので、開いた瞬間に出ます（受け口に聞き直しません）。
+ */
+function deliveryLine(row) {
+  const got = String(row[F.ADDR] || '').trim().toLowerCase();      // 届いた先
+  const rc = String(row[F.RCPT] || '').split(',').map((a) => a.trim().toLowerCase()).filter(Boolean);
+  const name = (a) => (S.addrNames[a] ? esc(S.addrNames[a]) + '（' + esc(a) + '）' : esc(a));
+  const few = (list) => list.slice(0, 2).map(name).join('、') + (list.length > 2 ? ' 他' + (list.length - 2) + '人' : '');
+  const known = got && got !== '(不明)';
+  if (!rc.length) {
+    // 宛先を覚える前に作った索引の行。届いた先だけ出します
+    return known ? '届いた先 <b>' + name(got) + '</b>' : '';
+  }
+  if (known && rc.indexOf(got) < 0) {
+    return '<span class="tag tag--fwd">転送</span>宛先 ' + few(rc) + ' → <b>' + name(got) + '</b> に届きました';
+  }
+  // 自分のアドレスを先に出します（ほかの宛先は数だけ）
+  const mine = rc.filter((a) => S.myAddrs.indexOf(a) >= 0);
+  const head = mine.length ? mine : rc;
+  const others = rc.length - head.length;
+  return '宛先 <b>' + head.slice(0, 2).map(name).join('、') + '</b>'
+    + (head.length > 2 ? ' 他' + (head.length - 2) + '人' : '')
+    + (others > 0 ? '（他に ' + others + '人）' : '');
+}
+
 /* ============================================================
  *  同じ1通を二度出さない
  *
@@ -922,6 +955,13 @@ async function openMail(key) {
   $('#dFrom').textContent = isSent
     ? ('宛先： ' + (String(row[F.TO] || '').trim() || '（宛先なし）'))
     : ((row[F.NAME] || '') + ' <' + row[F.FROM] + '>');
+  // ★どのアドレス宛てに届いたか・転送で回ってきたか（deliveryLine の説明）
+  const dTo = $('#dTo');
+  if (dTo) {
+    const line = isSent || S.demo ? '' : deliveryLine(row);
+    dTo.innerHTML = line;
+    dTo.hidden = !line;
+  }
   $('#dDate').textContent = fmtFull(row[F.DATE]);
   $('#dCat').innerHTML = '<span class="tag tag--' + k.id + '">' + esc(k.name) + '</span>'
     + '<span class="why">' + esc(why) + '</span>';
