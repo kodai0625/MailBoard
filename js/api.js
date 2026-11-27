@@ -155,10 +155,12 @@ const Api = {
   scan(src) { return this.post(src, 'scan', {}); },
   // light ＝ 新しく届いたぶんだけ（見張りが10秒おきに呼ぶほう）
   // have ＝ この端末がいま持っている通数。渡すと、足りないぶんも一緒に返ります
-  sync(src, light, have) {
+  // since ＝ この端末が既読・旗をそろえた時点の印。渡すと、そこからの変化（marks）も返ります
+  sync(src, light, have, since) {
     const b = {};
     if (light) b.light = true;
     if (have !== undefined) b.have = have;
+    if (light && since) b.since = String(since);
     return this.post(src, 'sync', b);
   },
   peek(src) { return this.post(src, 'peek', {}); },

@@ -53,6 +53,7 @@ const S = {
   watchAt: 0,         // 前に聞いた時刻
   watchBusy: 0,       // いま聞いている最中か
   fullAt: 0,          // 前に「ぜんぶそろえた」時刻（未読・フラグ・合計）
+  readH: {},          // 受け口ごとの、既読・旗をそろえた時点の印（Gmail の historyId。applyMarks の説明）
   gapStuck: {},       // 受け口 → 取り戻しても増えなかったときの通数
   trans: new Map(),   // 見出し → 訳した文（★端末の中だけ。どこにも残しません）
   showTrans: false,   // いま訳したほうを出しているか
@@ -325,6 +326,37 @@ function toMeOf(row) {
     if (S.myAddrs.indexOf(list[i]) >= 0) return 'direct';
   }
   return 'via';
+}
+
+/**
+ * ほかの端末や Gmail で**既読・未読・旗が変わった分**を、この端末の一覧に当てます（2026-11-27、
+ * ko-dai さんの「パソコン・iPad・スマホで既読が共有されるように」）。
+ *
+ * ★前は既読の状態を「ぜんぶそろえる」取り込み（5分に1回）でしか受け取っていなかったので、
+ *   ほかの端末で読んだメールが5分以上「未読」のままでした。
+ * ★受け口は、この端末が前にそろえた時点の印（S.readH）からの変化だけを返します（marksSince_）。
+ *   見張りが10秒おきに「動いたか」を見ているので、ほかの端末で読むと、10秒ほどで既読になります。
+ * ★当てるのは、その受け口から来た行だけです（もう片方の受け口の同じ番号に当てない）。
+ * 戻り値：{ rows: 変えた行の数, stars: 変えた旗の数 }
+ */
+function applyMarks(src, m) {
+  const R = new Set((m.read || []).map(String));
+  const U = new Set((m.unread || []).map(String));
+  let rows = 0, stars = 0;
+  if (R.size || U.size) {
+    for (let i = 0; i < S.rows.length; i++) {
+      const r = S.rows[i];
+      if (String(r[F.SRC]) !== src) continue;
+      const id = String(r[F.ID]);
+      const want = R.has(id) ? 0 : (U.has(id) ? 1 : null);
+      if (want === null || r[F.UNREAD] === want) continue;
+      r[F.UNREAD] = want;
+      rows++;
+    }
+  }
+  (m.starOn || []).forEach((id) => { const k = src + ':' + id; if (!S.star.has(k)) { S.star.add(k); stars++; } });
+  (m.starOff || []).forEach((id) => { const k = src + ':' + id; if (S.star.has(k)) { S.star.delete(k); stars++; } });
+  return { rows, stars };
 }
 
 /**
@@ -2104,7 +2136,7 @@ async function syncNew(quiet, pre) {
      * ★起動のときは**先に頼んである**ので、起動のほうで測った時間が入っています。 */
     const got = pre || await Promise.all(live.map((src) => {
       const t1 = Date.now();
-      return Api.sync(src, light, have0[src])
+      return Api.sync(src, light, have0[src], S.readH[src])
         .then((d) => ({ src, d, ms: Date.now() - t1 })).catch((e) => ({ src, e }));
     }));
 
@@ -2113,6 +2145,7 @@ async function syncNew(quiet, pre) {
     const failed = [];
     let dirty = false;                 // 索引を書き直す必要があるか
     let didFull = false;               // ぜんぶそろえた返事が来たか
+    let needFull = false;              // 既読の変化の記録が古すぎた（すぐ、ぜんぶそろえ直す）
     for (const { src, d, e, ms } of got) {
       if (e || !d) {
         // ★転んだ受け口は、名前を控えて必ず知らせます。
@@ -2156,6 +2189,16 @@ async function syncNew(quiet, pre) {
       //   前はこのあと peek をもう1回ずつ聞いていました（往復の無駄）。
       //   古い受け口は返さないので、そのときだけ今までどおり聞きます
       if (d.h) S.seenH[src] = String(d.h);
+      /* ★ほかの端末や Gmail で既読・旗が変わった分（marks）を当てます（applyMarks の説明）。
+       *   記録が古すぎて分からないときは、すぐに「ぜんぶそろえる」取り込みをやり直します。 */
+      if (d.marks && !d.marks.gap) {
+        const mk = applyMarks(src, d.marks);
+        if (mk.rows) dirty = true;
+        if (mk.stars) await Store.set('star', Array.from(S.star));
+      }
+      if (d.marks && d.marks.gap) needFull = true;
+      // そろった時点の印を覚えます（ぜんぶそろえた返事か、変化を当てられた返事のときだけ）
+      if (d.h && (!d.light || (d.marks && !d.marks.gap))) S.readH[src] = String(d.h);
       // 未読の一覧を受け取って、こちらの印を合わせます。
       // 既読かどうかは Gmail 側でも変わるので、毎回そろえます。
       // ★合わせるのは、その受け口から来た行だけです。全部に当てると、
@@ -2256,6 +2299,8 @@ async function syncNew(quiet, pre) {
     //   ふだんは何も変わらないので、ほとんどの回はここを通りません。
     if (didFull) S.fullAt = Date.now();
     if (dirty) saveSoon();          // ★待ちません（上の説明）
+    await Store.set('readH', S.readH);
+    if (needFull) { S.fullAt = 0; setTimeout(() => syncNew(true), 1500); }   // ぜんぶそろえる返事には marks が無いので、繰り返しません
     // ★「索引を何行目まで読んだか」も残します（次に開いたときに使います）
     await Store.set('consumed', S.consumed);
     await Store.set('fmt', Store.FMT);
@@ -3466,6 +3511,9 @@ async function boot() {
     const c = await Store.get('count');
     if (c && typeof c === 'object') Object.assign(haveSaved, c);
     // ★「索引を何行目まで読んだか」のほうが確かです（手元の通数は重複を消したぶん少ない）
+    // ★既読・旗をそろえた時点の印（applyMarks の説明）。起動の取り込みにも渡して、開いた時点でそろえます
+    const rh = await Store.get('readH');
+    if (rh && typeof rh === 'object') S.readH = rh;
     const cs = await Store.get('consumed');
     if (cs && typeof cs === 'object') {
       S.consumed = cs;
@@ -3483,7 +3531,7 @@ async function boot() {
    *   ⚙ に出した数字で判明）。起動でいちばん要るのは**新着が出ること**です。
    *   そろえ直しは、このあと見張りが静かにやります（10秒後）。 */
   const syncEarly = Promise.all(live.map((src) =>
-    Api.sync(src, true, haveSaved[src])
+    Api.sync(src, true, haveSaved[src], S.readH[src])
       .then((d) => ({ src, d, ms: Date.now() - bootT0 })).catch((e) => ({ src, e }))))
     .then((r) => { S.bootMs.sync = Date.now() - bootT0; return r; });
   // 受け口の状態も、同じく先に聞いておきます（索引の読み込みと同時に進みます）
@@ -3658,6 +3706,9 @@ async function boot() {
    *   上の try の**外**なので、手前が転んでも必ず通ります。 */
   await deliverEarly();
   S.bootMs.all = Date.now() - bootT0;      // ぜんぶ終わるまで
+  /* ★まだ既読をそろえた印が無い受け口（この仕組みを入れたあと最初の起動など）は、
+   *   すぐに「ぜんぶそろえる」取り込みをして、印を作ります */
+  if (live.some((src) => !S.readH[src])) { S.fullAt = 0; setTimeout(() => syncNew(true), 1500); }
   renderScanNote();
   // ★⚙ の「前の起動」も描き直します（描き直さないと「ぜんぶ終わるまで」が出ません）
   S.busy = ''; render(); renderSources();
